@@ -81,7 +81,7 @@ export function SpecToolbar({
         <Button
           size="sm"
           onClick={handleCopy}
-          disabled={isStreaming || !content}
+          disabled={!content}
           className="bg-orange-500 hover:bg-orange-600 text-black font-semibold h-8 text-[12px] gap-1.5"
         >
           {copied ? (
@@ -101,7 +101,7 @@ export function SpecToolbar({
           size="sm"
           variant="outline"
           onClick={handleDownload}
-          disabled={isStreaming || !content}
+          disabled={!content}
           className="border-white/10 h-8 text-[12px] gap-1.5"
         >
           <Download className="h-3.5 w-3.5" />

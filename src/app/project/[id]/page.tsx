@@ -402,8 +402,13 @@ export default function ProjectPage() {
   }, [sectionStream.isStreaming, sectionStream.text, regeneratingSection]);
 
   // When full spec streaming completes, save the spec
+  const specSavedRef = useRef(false);
   useEffect(() => {
-    if (!stream.isStreaming && stream.text && project && !project.spec) {
+    if (stream.isStreaming) {
+      specSavedRef.current = false; // Reset when a new stream starts
+    }
+    if (!stream.isStreaming && stream.text && project && !specSavedRef.current) {
+      specSavedRef.current = true;
       const content = stream.text;
       const sectionMatches = content.match(/^## \d+\./gm);
       const spec = {
