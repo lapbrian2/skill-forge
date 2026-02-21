@@ -173,6 +173,10 @@ export default function ProjectPage() {
       }
 
       const data = await res.json();
+
+      // Track the LLM's phase_complete flag for the next user response
+      lastPhaseCompleteRef.current = data.phase_complete === true;
+
       dispatch({
         type: "AI_SUGGEST",
         payload: {
@@ -195,70 +199,11 @@ export default function ProjectPage() {
     }
   };
 
-  // Handle user response (accept/edit/override)
-  const handleUserResponse = useCallback((answer: string, action: "accept" | "edit" | "override") => {
-    const proj = projectRef.current;
-    const s = stateRef.current;
-    if (!proj) return;
-    dispatch({ type: "USER_RESPOND", payload: { answer, action } });
+  // Track the last phase_complete flag from the API
+  const lastPhaseCompleteRef = useRef(false);
 
-    // Check adaptive depth
-    const questionsInPhase = s.questionsAskedInPhase + 1;
-    const depthResult = shouldPhaseComplete(
-      proj.complexity,
-      questionsInPhase,
-      false,
-    );
-
-    if (depthResult === "force_complete") {
-      // Phase is forced complete — advance
-      const phaseAnswers = s.messages.filter(
-        (m: ChatMessage) => m.phase === s.currentPhase && m.type === "user_response"
-      );
-      const summary = phaseAnswers.map((a: ChatMessage) => `${a.field}: ${a.content.slice(0, 100)}`).join("; ");
-      dispatch({ type: "PHASE_COMPLETE", payload: { summary } });
-
-      const discovery = { ...proj.discovery };
-      if (s.currentPhase === "discover") discovery.tollgate_1_passed = true;
-      if (s.currentPhase === "define") discovery.tollgate_2_passed = true;
-      if (s.currentPhase === "architect") discovery.tollgate_3_passed = true;
-
-      const nextPhase = NEXT_PHASE_MAP[s.currentPhase];
-      if (nextPhase) {
-        setTimeout(() => {
-          dispatch({ type: "ADVANCE_PHASE", payload: { nextPhase } });
-          const updated = {
-            ...proj,
-            current_phase: nextPhase,
-            discovery: {
-              ...discovery,
-              chat_messages: stateRef.current.messages,
-              understanding: stateRef.current.understanding,
-            },
-          };
-          save(updated);
-
-          if (nextPhase === "specify") {
-            generateSpec(updated);
-          }
-
-          toast.success(`Phase complete! Moving to ${nextPhase}`);
-        }, 500);
-      }
-    } else {
-      // Continue — fetch next suggestion after state settles
-      setTimeout(() => {
-        dispatch({ type: "RESTORE_SESSION", payload: { status: "idle" } });
-      }, 100);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [save]);
-
-  const handlePhaseComplete = useCallback(() => {
-    const proj = projectRef.current;
-    const s = stateRef.current;
-    if (!proj) return;
-
+  // Advance to the next phase (shared logic for force_complete and llm_complete)
+  const advancePhase = useCallback((proj: Project, s: typeof state) => {
     const phaseAnswers = s.messages.filter(
       (m: ChatMessage) => m.phase === s.currentPhase && m.type === "user_response"
     );
@@ -286,14 +231,67 @@ export default function ProjectPage() {
         save(updated);
 
         if (nextPhase === "specify") {
-          generateSpec(updated);
+          // Mark that we need to auto-generate when state settles
+          pendingGenerateRef.current = updated;
         }
 
         toast.success(`Phase complete! Moving to ${nextPhase}`);
       }, 500);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [save]);
+
+  // Track pending spec generation (to avoid race with state updates)
+  const pendingGenerateRef = useRef<Project | null>(null);
+
+  // Auto-generate spec when entering specify phase
+  useEffect(() => {
+    if (
+      state.currentPhase === "specify" &&
+      pendingGenerateRef.current &&
+      !stream.isStreaming &&
+      !stream.text
+    ) {
+      const proj = pendingGenerateRef.current;
+      pendingGenerateRef.current = null;
+      generateSpec(proj);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.currentPhase, stream.isStreaming, stream.text]);
+
+  // Handle user response (accept/edit/override)
+  const handleUserResponse = useCallback((answer: string, action: "accept" | "edit" | "override") => {
+    const proj = projectRef.current;
+    const s = stateRef.current;
+    if (!proj) return;
+    dispatch({ type: "USER_RESPOND", payload: { answer, action } });
+
+    // Check adaptive depth — also honor the LLM's phase_complete flag
+    const questionsInPhase = s.questionsAskedInPhase + 1;
+    const llmSaysComplete = lastPhaseCompleteRef.current;
+    const depthResult = shouldPhaseComplete(
+      proj.complexity,
+      questionsInPhase,
+      llmSaysComplete,
+    );
+
+    if (depthResult === "force_complete" || depthResult === "complete") {
+      advancePhase(proj, { ...s, questionsAskedInPhase: questionsInPhase });
+    } else {
+      // Continue — fetch next suggestion after state settles
+      setTimeout(() => {
+        dispatch({ type: "RESTORE_SESSION", payload: { status: "idle" } });
+      }, 100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [save, advancePhase]);
+
+  const handlePhaseComplete = useCallback(() => {
+    const proj = projectRef.current;
+    const s = stateRef.current;
+    if (!proj) return;
+    advancePhase(proj, s);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advancePhase]);
 
   const handleSkipToSpec = useCallback(() => {
     const proj = projectRef.current;
@@ -310,7 +308,8 @@ export default function ProjectPage() {
       },
     };
     save(updated);
-    generateSpec(updated);
+    // Auto-generate will fire via the pendingGenerateRef effect
+    pendingGenerateRef.current = updated;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [save]);
 
@@ -567,8 +566,8 @@ export default function ProjectPage() {
           </motion.div>
         )}
 
-        {/* Specify Phase: Ready to Generate (no content yet) */}
-        {state.currentPhase === "specify" && !stream.isStreaming && !stream.text && (
+        {/* Specify Phase: Ready to Generate (fallback if auto-generate didn't fire) */}
+        {state.currentPhase === "specify" && !stream.isStreaming && !stream.text && !specMarkdown && (
           <motion.div
             key="specify-ready"
             initial={{ opacity: 0 }}
