@@ -12,6 +12,9 @@ import { SYSTEM_VALIDATOR, promptValidateClarity } from "@/lib/llm/prompts";
 import { WEASEL_WORDS, TOLLGATE_WEIGHTS, scoreToGrade, SPEC_SECTIONS } from "@/lib/constants";
 import type { Check, Remediation, TollgateResult } from "@/lib/types";
 
+// Extend Vercel function timeout for LLM-based validation.
+export const maxDuration = 60;
+
 // ── Helper functions ───────────────────────────────────────────
 
 function checkSection(markdown: string, sectionNumber: number, title: string): Check {

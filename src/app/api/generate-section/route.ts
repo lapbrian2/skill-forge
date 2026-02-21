@@ -8,6 +8,9 @@
 import { llmStream } from "@/lib/llm/client";
 import { SYSTEM_GENERATOR, promptRegenerateSection } from "@/lib/llm/prompts";
 
+// Extend Vercel function timeout for section regeneration streams.
+export const maxDuration = 300;
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
