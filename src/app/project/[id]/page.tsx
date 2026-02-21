@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useReducer, useCallback, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
-  ArrowRight, ArrowLeft, CheckCircle, Loader2, Download,
-  Copy, FileText, Sparkles, AlertCircle, ChevronRight,
+  CheckCircle, Loader2, Download, Copy, Sparkles, AlertCircle,
 } from "lucide-react";
 import { getProject, saveProject } from "@/lib/storage";
 import { PHASES } from "@/lib/constants";
-import type { Project, Phase, QAEntry } from "@/lib/types";
+import { discoveryReducer, INITIAL_STATE } from "@/lib/discovery/state-machine";
+import { shouldPhaseComplete } from "@/lib/discovery/adaptive-depth";
+import { ChatContainer } from "@/components/discovery/chat-container";
+import { SkipButton } from "@/components/discovery/skip-button";
+import { useLLMStream } from "@/hooks/use-llm-stream";
+import type { Project, Phase, QAEntry, ChatMessage } from "@/lib/types";
 import { toast } from "sonner";
 
 const PHASE_COLORS: Record<string, string> = {
@@ -23,25 +26,33 @@ const PHASE_COLORS: Record<string, string> = {
   deliver: "bg-emerald-500",
 };
 
+const DISCOVERY_PHASES: Phase[] = ["discover", "define", "architect"];
+const NEXT_PHASE_MAP: Record<string, Phase> = {
+  discover: "define",
+  define: "architect",
+  architect: "specify",
+};
+
 export default function ProjectPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
 
   const [project, setProject] = useState<Project | null>(null);
-  const [currentQuestion, setCurrentQuestion] = useState<{
-    question: string;
-    why: string;
-    options: string[] | null;
-    field: string;
-    phase_complete: boolean;
-  } | null>(null);
-  const [answer, setAnswer] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [state, dispatch] = useReducer(discoveryReducer, INITIAL_STATE);
   const [specMarkdown, setSpecMarkdown] = useState("");
+  const stream = useLLMStream();
 
-  // Load project
+  // Refs for stable access in callbacks without re-triggering effects
+  const projectRef = useRef<Project | null>(null);
+  const stateRef = useRef(state);
+  projectRef.current = project;
+  stateRef.current = state;
+
+  // Track whether we've triggered the initial fetch for the current phase
+  const fetchTriggeredRef = useRef<string | null>(null);
+
+  // Load project and restore session
   useEffect(() => {
     const p = getProject(projectId);
     if (!p) {
@@ -53,164 +64,295 @@ export default function ProjectPage() {
     if (p.spec?.markdown_content) {
       setSpecMarkdown(p.spec.markdown_content);
     }
+
+    // Restore chat session
+    if (p.discovery.chat_messages && p.discovery.chat_messages.length > 0) {
+      const phaseQuestions = p.discovery.chat_messages.filter(
+        (m: ChatMessage) => m.phase === p.current_phase && m.type === "user_response"
+      ).length;
+      dispatch({
+        type: "RESTORE_SESSION",
+        payload: {
+          messages: p.discovery.chat_messages,
+          currentPhase: p.current_phase,
+          questionsAskedInPhase: phaseQuestions,
+          totalQuestionsAsked: p.discovery.chat_messages.filter((m: ChatMessage) => m.type === "user_response").length,
+          understanding: p.discovery.understanding || {},
+          status: "idle",
+        },
+      });
+    } else if (p.discovery.answers.length > 0) {
+      // Migrate old Q&A format
+      const migratedMessages = migrateQAToChat(p.discovery.answers);
+      const phaseQuestions = migratedMessages.filter(
+        (m: ChatMessage) => m.phase === p.current_phase && m.type === "user_response"
+      ).length;
+      dispatch({
+        type: "RESTORE_SESSION",
+        payload: {
+          messages: migratedMessages,
+          currentPhase: p.current_phase,
+          questionsAskedInPhase: phaseQuestions,
+          totalQuestionsAsked: migratedMessages.filter((m: ChatMessage) => m.type === "user_response").length,
+          status: "idle",
+        },
+      });
+    }
   }, [projectId, router]);
 
-  // Auto-fetch first question when entering a discovery phase
+  // Auto-save chat messages to localStorage
   useEffect(() => {
-    if (project && !currentQuestion && !isLoading && ["discover", "define", "architect"].includes(project.current_phase)) {
-      fetchNextQuestion();
+    if (!project || state.messages.length === 0) return;
+    const updated: Project = {
+      ...project,
+      discovery: {
+        ...project.discovery,
+        chat_messages: state.messages,
+        understanding: state.understanding,
+        answers: derivQAEntries(state.messages),
+      },
+      current_phase: state.currentPhase,
+      updated_at: new Date().toISOString(),
+    };
+    saveProject(updated);
+    setProject(updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.messages.length, state.currentPhase]);
+
+  // Auto-fetch first suggestion when entering a discovery phase
+  useEffect(() => {
+    if (
+      project &&
+      state.status === "idle" &&
+      DISCOVERY_PHASES.includes(state.currentPhase) &&
+      fetchTriggeredRef.current !== `${state.currentPhase}-${state.messages.length}`
+    ) {
+      fetchTriggeredRef.current = `${state.currentPhase}-${state.messages.length}`;
+      fetchSuggestion();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.current_phase]);
+  }, [state.status, state.currentPhase, project?.id]);
 
   const save = useCallback((updated: Project) => {
     setProject(updated);
     saveProject(updated);
   }, []);
 
-  // Fetch next question from LLM
-  const fetchNextQuestion = async () => {
-    if (!project) return;
-    setIsLoading(true);
+  // Fetch next AI suggestion
+  const fetchSuggestion = async () => {
+    const proj = projectRef.current;
+    const s = stateRef.current;
+    if (!proj) return;
+    dispatch({ type: "START_THINKING" });
 
     try {
+      const answers = derivQAEntries(s.messages);
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "question",
-          description: project.initial_description,
-          phase: project.current_phase,
-          answers: project.discovery.answers.map(a => ({ question: a.question, answer: a.answer })),
-          complexity: project.complexity,
-          is_agentic: project.is_agentic,
+          action: "suggest",
+          description: proj.initial_description,
+          phase: s.currentPhase,
+          answers: answers.map(a => ({ question: a.question, answer: a.answer })),
+          complexity: proj.complexity,
+          is_agentic: proj.is_agentic,
+          understanding: s.understanding,
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setCurrentQuestion(data);
-      } else {
-        toast.error("Failed to generate question. Check your API key.");
+      if (!res.ok) {
+        throw new Error("Failed to get suggestion. Check your API key.");
       }
-    } catch {
-      toast.error("LLM unavailable. Add ANTHROPIC_API_KEY to your environment.");
-    } finally {
-      setIsLoading(false);
+
+      const data = await res.json();
+      dispatch({
+        type: "AI_SUGGEST",
+        payload: {
+          question: data.question,
+          why: data.why,
+          field: data.field,
+          suggestion: {
+            proposed_answer: data.suggested_answer,
+            confidence: data.confidence,
+            reasoning: data.reasoning,
+            best_practice_note: data.best_practice_note,
+          },
+          phase_complete: data.phase_complete,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "LLM unavailable";
+      dispatch({ type: "ERROR", payload: message });
+      toast.error(message);
     }
   };
 
-  // Submit answer and get next question
-  const handleSubmitAnswer = async () => {
-    if (!project || !currentQuestion || !answer.trim()) return;
+  // Handle user response (accept/edit/override)
+  const handleUserResponse = useCallback((answer: string, action: "accept" | "edit" | "override") => {
+    const proj = projectRef.current;
+    const s = stateRef.current;
+    if (!proj) return;
+    dispatch({ type: "USER_RESPOND", payload: { answer, action } });
 
-    const entry: QAEntry = {
-      id: crypto.randomUUID(),
-      phase: project.current_phase,
-      question: currentQuestion.question,
-      answer: answer.trim(),
-      timestamp: new Date().toISOString(),
-    };
+    // Check adaptive depth
+    const questionsInPhase = s.questionsAskedInPhase + 1;
+    const depthResult = shouldPhaseComplete(
+      proj.complexity,
+      questionsInPhase,
+      false,
+    );
 
+    if (depthResult === "force_complete") {
+      // Phase is forced complete — advance
+      const phaseAnswers = s.messages.filter(
+        (m: ChatMessage) => m.phase === s.currentPhase && m.type === "user_response"
+      );
+      const summary = phaseAnswers.map((a: ChatMessage) => `${a.field}: ${a.content.slice(0, 100)}`).join("; ");
+      dispatch({ type: "PHASE_COMPLETE", payload: { summary } });
+
+      const discovery = { ...proj.discovery };
+      if (s.currentPhase === "discover") discovery.tollgate_1_passed = true;
+      if (s.currentPhase === "define") discovery.tollgate_2_passed = true;
+      if (s.currentPhase === "architect") discovery.tollgate_3_passed = true;
+
+      const nextPhase = NEXT_PHASE_MAP[s.currentPhase];
+      if (nextPhase) {
+        setTimeout(() => {
+          dispatch({ type: "ADVANCE_PHASE", payload: { nextPhase } });
+          const updated = {
+            ...proj,
+            current_phase: nextPhase,
+            discovery: {
+              ...discovery,
+              chat_messages: stateRef.current.messages,
+              understanding: stateRef.current.understanding,
+            },
+          };
+          save(updated);
+
+          if (nextPhase === "specify") {
+            generateSpec(updated);
+          }
+
+          toast.success(`Phase complete! Moving to ${nextPhase}`);
+        }, 500);
+      }
+    } else {
+      // Continue — fetch next suggestion after state settles
+      setTimeout(() => {
+        dispatch({ type: "RESTORE_SESSION", payload: { status: "idle" } });
+      }, 100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [save]);
+
+  const handlePhaseComplete = useCallback(() => {
+    const proj = projectRef.current;
+    const s = stateRef.current;
+    if (!proj) return;
+
+    const phaseAnswers = s.messages.filter(
+      (m: ChatMessage) => m.phase === s.currentPhase && m.type === "user_response"
+    );
+    const summary = phaseAnswers.map((a: ChatMessage) => `${a.field}: ${a.content.slice(0, 100)}`).join("; ");
+    dispatch({ type: "PHASE_COMPLETE", payload: { summary } });
+
+    const discovery = { ...proj.discovery };
+    if (s.currentPhase === "discover") discovery.tollgate_1_passed = true;
+    if (s.currentPhase === "define") discovery.tollgate_2_passed = true;
+    if (s.currentPhase === "architect") discovery.tollgate_3_passed = true;
+
+    const nextPhase = NEXT_PHASE_MAP[s.currentPhase];
+    if (nextPhase) {
+      setTimeout(() => {
+        dispatch({ type: "ADVANCE_PHASE", payload: { nextPhase } });
+        const updated = {
+          ...proj,
+          current_phase: nextPhase,
+          discovery: {
+            ...discovery,
+            chat_messages: stateRef.current.messages,
+            understanding: stateRef.current.understanding,
+          },
+        };
+        save(updated);
+
+        if (nextPhase === "specify") {
+          generateSpec(updated);
+        }
+
+        toast.success(`Phase complete! Moving to ${nextPhase}`);
+      }, 500);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [save]);
+
+  const handleSkipToSpec = useCallback(() => {
+    const proj = projectRef.current;
+    const s = stateRef.current;
+    if (!proj) return;
+    dispatch({ type: "SKIP_TO_SPEC" });
     const updated = {
-      ...project,
+      ...proj,
+      current_phase: "specify" as Phase,
       discovery: {
-        ...project.discovery,
-        answers: [...project.discovery.answers, entry],
+        ...proj.discovery,
+        chat_messages: s.messages,
+        understanding: s.understanding,
       },
     };
-
     save(updated);
-    setAnswer("");
+    generateSpec(updated);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [save]);
 
-    // Check if phase is complete
-    if (currentQuestion.phase_complete) {
-      advancePhase(updated);
-    } else {
-      setCurrentQuestion(null);
-      // Will trigger fetchNextQuestion via useEffect
-      setProject(updated);
-    }
-  };
-
-  // Advance to next phase
-  const advancePhase = (proj: Project) => {
-    const phaseOrder: Phase[] = ["discover", "define", "architect", "specify", "deliver"];
-    const currentIdx = phaseOrder.indexOf(proj.current_phase);
-    const nextPhase = phaseOrder[currentIdx + 1];
-
-    if (!nextPhase) return;
-
-    // Mark tollgate passed
-    const discovery = { ...proj.discovery };
-    if (proj.current_phase === "discover") discovery.tollgate_1_passed = true;
-    if (proj.current_phase === "define") discovery.tollgate_2_passed = true;
-    if (proj.current_phase === "architect") discovery.tollgate_3_passed = true;
-
-    const updated = { ...proj, current_phase: nextPhase, discovery };
-    save(updated);
-    setCurrentQuestion(null);
-
-    if (nextPhase === "specify") {
-      generateSpec(updated);
-    }
-
-    toast.success(`Phase complete! Moving to ${nextPhase}`);
-  };
-
-  // Confirm current phase and advance
-  const handleConfirmPhase = () => {
-    if (!project) return;
-    advancePhase(project);
-  };
-
-  // Generate the full spec
+  // Generate spec using streaming
   const generateSpec = async (proj: Project) => {
-    setIsGenerating(true);
+    stream.reset();
 
-    try {
-      const res = await fetch("/api/generate", {
+    await stream.startStream("/api/generate", {
+      project_data: {
+        name: proj.name,
+        one_liner: proj.one_liner,
+        description: proj.initial_description,
+        complexity: proj.complexity,
+        is_agentic: proj.is_agentic,
+        discovery: proj.discovery,
+      },
+      complexity: proj.complexity,
+    });
+  };
+
+  // When streaming completes, save the spec
+  useEffect(() => {
+    if (!stream.isStreaming && stream.text && project && !project.spec) {
+      const content = stream.text;
+      const sectionMatches = content.match(/^## \d+\./gm);
+      const spec = {
+        project_id: project.id,
+        version: "1.0",
+        markdown_content: content,
+        section_count: sectionMatches ? sectionMatches.length : 0,
+        word_count: content.split(/\s+/).length,
+        generated_at: new Date().toISOString(),
+      };
+
+      const updated = { ...project, spec, current_phase: "deliver" as Phase };
+      save(updated);
+      setSpecMarkdown(content);
+
+      // Auto-validate
+      fetch("/api/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project_data: {
-            name: proj.name,
-            one_liner: proj.one_liner,
-            description: proj.initial_description,
-            complexity: proj.complexity,
-            is_agentic: proj.is_agentic,
-            discovery: proj.discovery,
-          },
-          complexity: proj.complexity,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const spec = {
-          project_id: proj.id,
-          version: "1.0",
-          markdown_content: data.markdown,
-          section_count: data.section_count,
-          word_count: data.word_count,
-          generated_at: new Date().toISOString(),
-        };
-
-        const updated = { ...proj, spec, current_phase: "deliver" as Phase };
-        save(updated);
-        setSpecMarkdown(data.markdown);
-
-        // Auto-validate
-        try {
-          const valRes = await fetch("/api/validate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ spec_content: data.markdown }),
-          });
-          if (valRes.ok) {
-            const valData = await valRes.json();
+        body: JSON.stringify({ spec_content: content }),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(valData => {
+          if (valData) {
             const validation = {
-              project_id: proj.id,
+              project_id: project.id,
               spec_version: "1.0",
               timestamp: new Date().toISOString(),
               tollgate_4: valData.tollgate_4,
@@ -222,27 +364,20 @@ export default function ProjectPage() {
             };
             save({ ...updated, validation });
           }
-        } catch {
-          // Validation is optional
-        }
+        })
+        .catch(() => {}); // Validation is optional
 
-        toast.success("Spec generated!");
-      } else {
-        toast.error("Failed to generate spec");
-      }
-    } catch {
-      toast.error("LLM unavailable");
-    } finally {
-      setIsGenerating(false);
+      toast.success("Spec generated!");
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream.isStreaming, stream.text]);
 
   if (!project) {
     return <div className="text-center text-white/30 py-20">Loading...</div>;
   }
 
-  const phaseIdx = PHASES.findIndex(p => p.id === project.current_phase);
-  const phaseAnswers = project.discovery.answers.filter(a => a.phase === project.current_phase);
+  const phaseIdx = PHASES.findIndex(p => p.id === (state.currentPhase || project.current_phase));
+  const isDiscoveryPhase = DISCOVERY_PHASES.includes(state.currentPhase);
 
   return (
     <div className="space-y-6">
@@ -292,142 +427,83 @@ export default function ProjectPage() {
         ))}
       </div>
 
-      {/* Phase Content */}
+      {/* Content */}
       <AnimatePresence mode="wait">
-        {/* ── Discovery Phases (1-3) ── */}
-        {["discover", "define", "architect"].includes(project.current_phase) && (
+        {/* Discovery Phases */}
+        {isDiscoveryPhase && (
           <motion.div
-            key={project.current_phase}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
+            key="discovery"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="space-y-4"
           >
-            {/* Phase description */}
-            <div className="rounded-xl border border-white/6 bg-white/[0.02] p-4">
-              <h2 className="text-[14px] font-semibold text-white/70">
-                Phase {phaseIdx + 1}: {PHASES[phaseIdx]?.label}
-              </h2>
-              <p className="text-[12px] text-white/30 mt-1">
-                {PHASES[phaseIdx]?.description}
-              </p>
-            </div>
-
-            {/* Previous answers */}
-            {phaseAnswers.length > 0 && (
-              <div className="space-y-2">
-                {phaseAnswers.map((qa, i) => (
-                  <div key={qa.id} className="rounded-lg border border-white/5 bg-white/[0.015] p-3 space-y-1.5">
-                    <p className="text-[12px] text-white/40">{qa.question}</p>
-                    <p className="text-[13px] text-white/70">{qa.answer}</p>
-                  </div>
-                ))}
+            {/* Error banner */}
+            {state.error && (
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
+                <p className="text-[12px] text-red-300">{state.error}</p>
+                <button
+                  onClick={fetchSuggestion}
+                  className="ml-auto text-[11px] text-red-400 hover:text-red-300 underline"
+                >
+                  Retry
+                </button>
               </div>
             )}
 
-            {/* Current question */}
-            {isLoading ? (
-              <div className="flex items-center gap-3 p-6 text-white/30 text-[13px]">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Thinking...
-              </div>
-            ) : currentQuestion ? (
-              <div className="rounded-xl border border-white/8 bg-[#111] p-5 space-y-4">
-                <div className="space-y-2">
-                  <p className="text-[15px] font-medium text-white/80">{currentQuestion.question}</p>
-                  <p className="text-[11px] text-white/25">{currentQuestion.why}</p>
-                </div>
+            {/* Chat container */}
+            <ChatContainer
+              messages={state.messages}
+              currentPhase={state.currentPhase}
+              isThinking={state.status === "ai_thinking"}
+              onAccept={(answer) => handleUserResponse(answer, "accept")}
+              onEdit={(answer) => handleUserResponse(answer, "edit")}
+              onOverride={(answer) => handleUserResponse(answer, "override")}
+              disabled={state.status === "saving"}
+            />
 
-                {/* Options or free-text */}
-                {currentQuestion.options && currentQuestion.options.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-2">
-                      {currentQuestion.options.map(opt => (
-                        <Button
-                          key={opt}
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setAnswer(opt)}
-                          className={`text-[12px] border-white/8 ${
-                            answer === opt ? "bg-orange-500/10 border-orange-500/30 text-orange-400" : "text-white/50"
-                          }`}
-                        >
-                          {opt}
-                        </Button>
-                      ))}
-                    </div>
-                    <Textarea
-                      value={answer}
-                      onChange={e => setAnswer(e.target.value)}
-                      placeholder="Or type your own answer..."
-                      className="bg-[#0A0A0A] border-white/8 text-[13px] min-h-[60px] resize-none"
-                      onKeyDown={e => {
-                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmitAnswer();
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <Textarea
-                    value={answer}
-                    onChange={e => setAnswer(e.target.value)}
-                    placeholder="Type your answer..."
-                    className="bg-[#0A0A0A] border-white/8 text-[14px] min-h-[80px] resize-none"
-                    autoFocus
-                    onKeyDown={e => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmitAnswer();
-                    }}
-                  />
-                )}
-
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-white/15">Ctrl+Enter to submit</span>
-                  <div className="flex gap-2">
-                    {phaseAnswers.length >= 3 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleConfirmPhase}
-                        className="border-white/10 text-[12px]"
-                      >
-                        Confirm & advance <ChevronRight className="h-3 w-3 ml-1" />
-                      </Button>
-                    )}
-                    <Button
-                      onClick={handleSubmitAnswer}
-                      disabled={!answer.trim()}
-                      size="sm"
-                      className="bg-orange-500 hover:bg-orange-600 text-black font-semibold"
-                    >
-                      <ArrowRight className="h-3.5 w-3.5 mr-1" /> Answer
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
+            {/* Skip button */}
+            {state.totalQuestionsAsked >= 1 && (
+              <SkipButton
+                onSkip={handleSkipToSpec}
+                questionsAnswered={state.totalQuestionsAsked}
+                complexity={project.complexity}
+              />
+            )}
           </motion.div>
         )}
 
-        {/* ── Specify Phase ── */}
-        {project.current_phase === "specify" && (
+        {/* Specify Phase (streaming) */}
+        {state.currentPhase === "specify" && (
           <motion.div
+            key="specify"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-center py-12 space-y-4"
+            className="space-y-4"
           >
-            {isGenerating ? (
-              <>
-                <Loader2 className="h-8 w-8 animate-spin text-orange-400 mx-auto" />
-                <h2 className="text-lg font-semibold">Generating your specification...</h2>
-                <p className="text-[13px] text-white/30">This may take 30-60 seconds for complex projects</p>
-              </>
+            {stream.isStreaming || stream.text ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  {stream.isStreaming && (
+                    <Loader2 className="h-5 w-5 text-orange-400 animate-spin" />
+                  )}
+                  <h2 className="text-[14px] font-semibold">
+                    {stream.isStreaming ? "Generating your specification..." : "Specification generated"}
+                  </h2>
+                </div>
+                <div className="rounded-xl border border-white/8 bg-[#111] p-6 overflow-auto max-h-[600px]">
+                  <pre className="text-[13px] font-mono text-white/60 whitespace-pre-wrap leading-relaxed">
+                    {stream.text}
+                  </pre>
+                </div>
+              </div>
             ) : (
-              <>
+              <div className="text-center py-12 space-y-4">
                 <Sparkles className="h-8 w-8 text-orange-400 mx-auto" />
                 <h2 className="text-lg font-semibold">Ready to generate</h2>
                 <p className="text-[13px] text-white/30">
-                  {project.discovery.answers.length} answers collected across {
-                    new Set(project.discovery.answers.map(a => a.phase)).size
-                  } phases
+                  {state.totalQuestionsAsked} answers collected
                 </p>
                 <Button
                   onClick={() => generateSpec(project)}
@@ -435,14 +511,15 @@ export default function ProjectPage() {
                 >
                   <Sparkles className="h-4 w-4 mr-2" /> Generate Spec
                 </Button>
-              </>
+              </div>
             )}
           </motion.div>
         )}
 
-        {/* ── Deliver Phase ── */}
+        {/* Deliver Phase */}
         {project.current_phase === "deliver" && specMarkdown && (
           <motion.div
+            key="deliver"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="space-y-4"
@@ -525,4 +602,50 @@ export default function ProjectPage() {
       </AnimatePresence>
     </div>
   );
+}
+
+// Helper: convert ChatMessage[] to QAEntry[] for backward compatibility
+function derivQAEntries(messages: ChatMessage[]): QAEntry[] {
+  const entries: QAEntry[] = [];
+  const questions = messages.filter(m => m.type === "question");
+  const responses = messages.filter(m => m.type === "user_response");
+
+  for (let i = 0; i < Math.min(questions.length, responses.length); i++) {
+    entries.push({
+      id: responses[i].id,
+      phase: questions[i].phase,
+      question: questions[i].content,
+      answer: responses[i].content,
+      timestamp: responses[i].timestamp,
+    });
+  }
+
+  return entries;
+}
+
+// Helper: migrate old QAEntry[] to ChatMessage[]
+function migrateQAToChat(entries: QAEntry[]): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  for (const entry of entries) {
+    messages.push({
+      id: crypto.randomUUID(),
+      role: "ai",
+      type: "question",
+      content: entry.question,
+      phase: entry.phase,
+      field: "",
+      timestamp: entry.timestamp,
+    });
+    messages.push({
+      id: entry.id,
+      role: "user",
+      type: "user_response",
+      content: entry.answer,
+      phase: entry.phase,
+      field: "",
+      user_action: "override",
+      timestamp: entry.timestamp,
+    });
+  }
+  return messages;
 }
