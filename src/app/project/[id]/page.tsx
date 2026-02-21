@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  CheckCircle, Loader2, Download, Copy, Sparkles, AlertCircle,
+  CheckCircle, Sparkles, AlertCircle,
 } from "lucide-react";
 import { getProject, saveProject } from "@/lib/storage";
 import { PHASES } from "@/lib/constants";
@@ -14,7 +14,9 @@ import { discoveryReducer, INITIAL_STATE } from "@/lib/discovery/state-machine";
 import { shouldPhaseComplete } from "@/lib/discovery/adaptive-depth";
 import { ChatContainer } from "@/components/discovery/chat-container";
 import { SkipButton } from "@/components/discovery/skip-button";
+import { SpecViewer } from "@/components/spec/spec-viewer";
 import { useLLMStream } from "@/hooks/use-llm-stream";
+import { replaceSection, parseSpecSections } from "@/lib/spec/section-parser";
 import type { Project, Phase, QAEntry, ChatMessage } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -41,7 +43,9 @@ export default function ProjectPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [state, dispatch] = useReducer(discoveryReducer, INITIAL_STATE);
   const [specMarkdown, setSpecMarkdown] = useState("");
+  const [regeneratingSection, setRegeneratingSection] = useState<number | null>(null);
   const stream = useLLMStream();
+  const sectionStream = useLLMStream();
 
   // Refs for stable access in callbacks without re-triggering effects
   const projectRef = useRef<Project | null>(null);
@@ -324,7 +328,80 @@ export default function ProjectPage() {
     });
   };
 
-  // When streaming completes, save the spec
+  // Regenerate a single section (SPEC-06)
+  const handleRegenerateSection = useCallback(async (sectionNumber: number) => {
+    const proj = projectRef.current;
+    if (!proj || !specMarkdown) return;
+
+    const sections = parseSpecSections(specMarkdown);
+    const targetSection = sections.find(s => s.number === sectionNumber);
+    if (!targetSection) {
+      toast.error(`Section ${sectionNumber} not found`);
+      return;
+    }
+
+    setRegeneratingSection(sectionNumber);
+    sectionStream.reset();
+
+    try {
+      await sectionStream.startStream("/api/generate-section", {
+        section_number: sectionNumber,
+        section_title: targetSection.title,
+        project_data: {
+          name: proj.name,
+          one_liner: proj.one_liner,
+          description: proj.initial_description,
+          complexity: proj.complexity,
+          is_agentic: proj.is_agentic,
+          discovery: proj.discovery,
+        },
+        current_spec: specMarkdown,
+        complexity: proj.complexity,
+      });
+    } catch {
+      toast.error("Failed to regenerate section");
+      setRegeneratingSection(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [specMarkdown]);
+
+  // When section regeneration completes, splice it into the spec
+  useEffect(() => {
+    if (
+      !sectionStream.isStreaming &&
+      sectionStream.text &&
+      regeneratingSection !== null &&
+      project
+    ) {
+      const updatedMarkdown = replaceSection(
+        specMarkdown,
+        regeneratingSection,
+        sectionStream.text,
+      );
+
+      setSpecMarkdown(updatedMarkdown);
+
+      // Update saved spec
+      if (project.spec) {
+        const sectionMatches = updatedMarkdown.match(/^## \d+\./gm);
+        const updatedSpec = {
+          ...project.spec,
+          markdown_content: updatedMarkdown,
+          section_count: sectionMatches ? sectionMatches.length : 0,
+          word_count: updatedMarkdown.split(/\s+/).length,
+        };
+        const updated = { ...project, spec: updatedSpec };
+        save(updated);
+      }
+
+      setRegeneratingSection(null);
+      sectionStream.reset();
+      toast.success(`Section ${regeneratingSection} regenerated`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionStream.isStreaming, sectionStream.text, regeneratingSection]);
+
+  // When full spec streaming completes, save the spec
   useEffect(() => {
     if (!stream.isStreaming && stream.text && project && !project.spec) {
       const content = stream.text;
@@ -378,6 +455,8 @@ export default function ProjectPage() {
 
   const phaseIdx = PHASES.findIndex(p => p.id === (state.currentPhase || project.current_phase));
   const isDiscoveryPhase = DISCOVERY_PHASES.includes(state.currentPhase);
+  const showSpecViewer = (state.currentPhase === "specify" && (stream.isStreaming || stream.text)) ||
+    (project.current_phase === "deliver" && specMarkdown);
 
   return (
     <div className="space-y-6">
@@ -474,129 +553,42 @@ export default function ProjectPage() {
           </motion.div>
         )}
 
-        {/* Specify Phase (streaming) */}
-        {state.currentPhase === "specify" && (
+        {/* Specify Phase: Ready to Generate (no content yet) */}
+        {state.currentPhase === "specify" && !stream.isStreaming && !stream.text && (
           <motion.div
-            key="specify"
+            key="specify-ready"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="space-y-4"
+            className="text-center py-12 space-y-4"
           >
-            {stream.isStreaming || stream.text ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  {stream.isStreaming && (
-                    <Loader2 className="h-5 w-5 text-orange-400 animate-spin" />
-                  )}
-                  <h2 className="text-[14px] font-semibold">
-                    {stream.isStreaming ? "Generating your specification..." : "Specification generated"}
-                  </h2>
-                </div>
-                <div className="rounded-xl border border-white/8 bg-[#111] p-6 overflow-auto max-h-[600px]">
-                  <pre className="text-[13px] font-mono text-white/60 whitespace-pre-wrap leading-relaxed">
-                    {stream.text}
-                  </pre>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-12 space-y-4">
-                <Sparkles className="h-8 w-8 text-orange-400 mx-auto" />
-                <h2 className="text-lg font-semibold">Ready to generate</h2>
-                <p className="text-[13px] text-white/30">
-                  {state.totalQuestionsAsked} answers collected
-                </p>
-                <Button
-                  onClick={() => generateSpec(project)}
-                  className="bg-orange-500 hover:bg-orange-600 text-black font-semibold"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" /> Generate Spec
-                </Button>
-              </div>
-            )}
+            <Sparkles className="h-8 w-8 text-orange-400 mx-auto" />
+            <h2 className="text-lg font-semibold">Ready to generate</h2>
+            <p className="text-[13px] text-white/30">
+              {state.totalQuestionsAsked} answers collected
+            </p>
+            <Button
+              onClick={() => generateSpec(project)}
+              className="bg-orange-500 hover:bg-orange-600 text-black font-semibold"
+            >
+              <Sparkles className="h-4 w-4 mr-2" /> Generate Spec
+            </Button>
           </motion.div>
         )}
 
-        {/* Deliver Phase */}
-        {project.current_phase === "deliver" && specMarkdown && (
+        {/* Spec Viewer: Streaming or Delivered */}
+        {showSpecViewer && (
           <motion.div
-            key="deliver"
+            key="spec-viewer"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="space-y-4"
           >
-            {/* Score card */}
-            {project.validation && (
-              <div className="rounded-xl border border-white/8 bg-[#111] p-5">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <span className="text-[12px] text-white/30">Quality Score</span>
-                    <div className="flex items-center gap-3">
-                      <span className={`text-3xl font-bold ${
-                        project.validation.overall_score >= 90 ? "text-emerald-400"
-                        : project.validation.overall_score >= 70 ? "text-amber-400"
-                        : "text-red-400"
-                      }`}>
-                        {project.validation.grade}
-                      </span>
-                      <span className="text-[14px] text-white/40">
-                        {project.validation.overall_score}/100
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right text-[12px] text-white/25 space-y-0.5">
-                    <div>Completeness: {project.validation.tollgate_4.score}%</div>
-                    <div>Production Ready: {project.validation.tollgate_5.score}%</div>
-                    {project.spec && <div>{project.spec.word_count.toLocaleString()} words</div>}
-                  </div>
-                </div>
-                {project.validation.remediations.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-white/6 space-y-1">
-                    {project.validation.remediations.slice(0, 3).map((r, i) => (
-                      <div key={i} className="flex items-start gap-2 text-[11px]">
-                        <AlertCircle className={`h-3 w-3 mt-0.5 flex-shrink-0 ${r.severity === "critical" ? "text-red-400" : "text-amber-400"}`} />
-                        <span className="text-white/40">{r.message}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Action buttons */}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={() => {
-                  navigator.clipboard.writeText(specMarkdown);
-                  toast.success("Spec copied to clipboard! Paste into Claude Code.");
-                }}
-                className="bg-orange-500 hover:bg-orange-600 text-black font-semibold"
-              >
-                <Copy className="h-4 w-4 mr-2" /> Copy Spec
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  const blob = new Blob([specMarkdown], { type: "text/markdown" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `${project.name || "spec"}.md`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  toast.success("Downloaded!");
-                }}
-                className="border-white/10"
-              >
-                <Download className="h-4 w-4 mr-2" /> Download .md
-              </Button>
-            </div>
-
-            {/* Spec content */}
-            <div className="rounded-xl border border-white/8 bg-[#111] p-6 overflow-auto max-h-[600px]">
-              <pre className="text-[13px] font-mono text-white/60 whitespace-pre-wrap leading-relaxed">
-                {specMarkdown}
-              </pre>
-            </div>
+            <SpecViewer
+              content={stream.isStreaming ? stream.text : specMarkdown}
+              isStreaming={stream.isStreaming}
+              project={project}
+              regeneratingSection={regeneratingSection}
+              onRegenerate={handleRegenerateSection}
+            />
           </motion.div>
         )}
       </AnimatePresence>

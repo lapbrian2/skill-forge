@@ -2,12 +2,14 @@
 // POST /api/generate
 // Streams the full engineering specification document
 // token-by-token via SSE using Anthropic SDK streaming.
+// Extracts user terminology for spec echoing (SPEC-04).
 // ═══════════════════════════════════════════════════════════════
 
 import { llmStream } from "@/lib/llm/client";
 import { SYSTEM_GENERATOR, promptGenerateSpec } from "@/lib/llm/prompts";
 import { COMPLEXITY_CONFIG } from "@/lib/constants";
-import type { Complexity } from "@/lib/types";
+import { extractTerminology } from "@/lib/spec/terminology";
+import type { Complexity, QAEntry } from "@/lib/types";
 
 export async function POST(req: Request) {
   try {
@@ -24,13 +26,19 @@ export async function POST(req: Request) {
     const cx = (complexity || "moderate") as Complexity;
     const sections = COMPLEXITY_CONFIG[cx].sections as unknown as number[];
 
+    // Extract terminology from user's discovery answers (SPEC-04)
+    const description = project_data.description || project_data.one_liner || "";
+    const answers: QAEntry[] = project_data.discovery?.answers || [];
+    const terminology = extractTerminology(description, answers);
+
     const stream = await llmStream({
       task: "generate",
       system: SYSTEM_GENERATOR,
       prompt: promptGenerateSpec(
         JSON.stringify(project_data, null, 2),
         cx,
-        sections
+        sections,
+        terminology,
       ),
     });
 
