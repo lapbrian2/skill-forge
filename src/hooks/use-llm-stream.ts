@@ -76,7 +76,7 @@ export function useLLMStream(): UseLLMStreamReturn {
         throw new Error("No response body for streaming");
       }
 
-      // Parse SSE events manually (avoids importing full Anthropic SDK on client)
+      // Parse streaming events (supports both SSE format and raw JSON lines)
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -90,46 +90,45 @@ export function useLLMStream(): UseLLMStreamReturn {
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Process complete SSE events (double newline separated)
-        const events = buffer.split("\n\n");
-        buffer = events.pop() || ""; // Keep incomplete event in buffer
+        // Split on newlines — handles both SSE (double newline) and raw JSON lines
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
-        for (const eventBlock of events) {
-          // Each SSE event may have multiple lines
-          for (const line of eventBlock.split("\n")) {
-            if (!line.startsWith("data: ")) continue;
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line || line === "[DONE]") continue;
 
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") continue;
+          // Strip SSE "data: " prefix if present, otherwise use raw line
+          const jsonStr = line.startsWith("data: ") ? line.slice(6).trim() : line;
+          if (!jsonStr || jsonStr === "[DONE]") continue;
 
-            try {
-              const event = JSON.parse(data);
+          try {
+            const event = JSON.parse(jsonStr);
 
-              // Handle text delta events (content_block_delta)
-              if (
-                event.type === "content_block_delta" &&
-                event.delta?.type === "text_delta" &&
-                event.delta?.text
-              ) {
-                accumulatedText += event.delta.text;
-                setState(prev => ({
-                  ...prev,
-                  text: accumulatedText,
-                }));
-              }
-
-              // Capture usage from message_delta (final event with output token count)
-              if (event.type === "message_delta" && event.usage) {
-                outputTokens = event.usage.output_tokens ?? 0;
-              }
-
-              // Capture input tokens from message_start
-              if (event.type === "message_start" && event.message?.usage) {
-                inputTokens = event.message.usage.input_tokens ?? 0;
-              }
-            } catch {
-              // Skip malformed JSON events
+            // Handle text delta events (content_block_delta)
+            if (
+              event.type === "content_block_delta" &&
+              event.delta?.type === "text_delta" &&
+              event.delta?.text
+            ) {
+              accumulatedText += event.delta.text;
+              setState(prev => ({
+                ...prev,
+                text: accumulatedText,
+              }));
             }
+
+            // Capture usage from message_delta (final event with output token count)
+            if (event.type === "message_delta" && event.usage) {
+              outputTokens = event.usage.output_tokens ?? 0;
+            }
+
+            // Capture input tokens from message_start
+            if (event.type === "message_start" && event.message?.usage) {
+              inputTokens = event.message.usage.input_tokens ?? 0;
+            }
+          } catch {
+            // Skip malformed JSON events (e.g., SSE event: lines)
           }
         }
       }

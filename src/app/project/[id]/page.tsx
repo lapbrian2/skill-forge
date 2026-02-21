@@ -107,6 +107,23 @@ export default function ProjectPage() {
     }
   }, [projectId, router]);
 
+  // Auto-generate spec if page loads at specify phase with no spec
+  const autoGenTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (
+      project &&
+      project.current_phase === "specify" &&
+      !project.spec?.markdown_content &&
+      !stream.isStreaming &&
+      !stream.text &&
+      !autoGenTriggeredRef.current
+    ) {
+      autoGenTriggeredRef.current = true;
+      generateSpec(project);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id, project?.current_phase]);
+
   // Auto-save chat messages to localStorage
   useEffect(() => {
     if (!project || state.messages.length === 0) return;
@@ -202,6 +219,24 @@ export default function ProjectPage() {
   // Track the last phase_complete flag from the API
   const lastPhaseCompleteRef = useRef(false);
 
+  // Generate spec using streaming
+  const generateSpec = useCallback(async (proj: Project) => {
+    stream.reset();
+
+    await stream.startStream("/api/generate", {
+      project_data: {
+        name: proj.name,
+        one_liner: proj.one_liner,
+        description: proj.initial_description,
+        complexity: proj.complexity,
+        is_agentic: proj.is_agentic,
+        discovery: proj.discovery,
+      },
+      complexity: proj.complexity,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Advance to the next phase (shared logic for force_complete and llm_complete)
   const advancePhase = useCallback((proj: Project, s: typeof state) => {
     const phaseAnswers = s.messages.filter(
@@ -231,32 +266,13 @@ export default function ProjectPage() {
         save(updated);
 
         if (nextPhase === "specify") {
-          // Mark that we need to auto-generate when state settles
-          pendingGenerateRef.current = updated;
+          generateSpec(updated);
         }
 
         toast.success(`Phase complete! Moving to ${nextPhase}`);
       }, 500);
     }
-  }, [save]);
-
-  // Track pending spec generation (to avoid race with state updates)
-  const pendingGenerateRef = useRef<Project | null>(null);
-
-  // Auto-generate spec when entering specify phase
-  useEffect(() => {
-    if (
-      state.currentPhase === "specify" &&
-      pendingGenerateRef.current &&
-      !stream.isStreaming &&
-      !stream.text
-    ) {
-      const proj = pendingGenerateRef.current;
-      pendingGenerateRef.current = null;
-      generateSpec(proj);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.currentPhase, stream.isStreaming, stream.text]);
+  }, [save, generateSpec]);
 
   // Handle user response (accept/edit/override)
   const handleUserResponse = useCallback((answer: string, action: "accept" | "edit" | "override") => {
@@ -308,27 +324,9 @@ export default function ProjectPage() {
       },
     };
     save(updated);
-    // Auto-generate will fire via the pendingGenerateRef effect
-    pendingGenerateRef.current = updated;
+    generateSpec(updated);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [save]);
-
-  // Generate spec using streaming
-  const generateSpec = async (proj: Project) => {
-    stream.reset();
-
-    await stream.startStream("/api/generate", {
-      project_data: {
-        name: proj.name,
-        one_liner: proj.one_liner,
-        description: proj.initial_description,
-        complexity: proj.complexity,
-        is_agentic: proj.is_agentic,
-        discovery: proj.discovery,
-      },
-      complexity: proj.complexity,
-    });
-  };
+  }, [save, generateSpec]);
 
   // Regenerate a single section (SPEC-06)
   const handleRegenerateSection = useCallback(async (sectionNumber: number) => {
