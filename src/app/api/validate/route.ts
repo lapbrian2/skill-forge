@@ -1,10 +1,12 @@
 // ═══════════════════════════════════════════════════════════════
 // POST /api/validate
-// Runs Tollgates 4-5 against a spec document
+// Runs Tollgates 4-5 against a spec document.
+// Uses Zod-validated structured output for LLM clarity scoring.
 // ═══════════════════════════════════════════════════════════════
 
-import { NextRequest, NextResponse } from "next/server";
-import { llmCallJSON } from "@/lib/llm/client";
+import { NextResponse } from "next/server";
+import { llmParse } from "@/lib/llm/client";
+import { ValidationClaritySchema } from "@/lib/llm/schemas";
 import { SYSTEM_VALIDATOR, promptValidateClarity } from "@/lib/llm/prompts";
 import { WEASEL_WORDS, TOLLGATE_WEIGHTS, scoreToGrade, SPEC_SECTIONS } from "@/lib/constants";
 import type { Check, Remediation, TollgateResult } from "@/lib/types";
@@ -41,7 +43,7 @@ function checkAssumptions(markdown: string): number {
   return matches ? matches.length : 0;
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { spec_content, required_sections } = body;
@@ -204,21 +206,25 @@ export async function POST(req: NextRequest) {
     // ── Optional: LLM clarity scoring for key sections ────────
     // Only if API key is available and spec is long enough
     let llmClarity = null;
+    let llmUsage = null;
     if (wordCount > 300) {
       try {
         // Score a sample section (first 2000 chars of data model or features)
         const sampleSection = spec_content.slice(0, 2000);
-        const { data } = await llmCallJSON<{
-          scores: Record<string, number>;
-          overall: number;
-          issues: string[];
-          suggestions: string[];
-        }>({
+        const { data, usage } = await llmParse({
+          task: "validate",
           system: SYSTEM_VALIDATOR,
           prompt: promptValidateClarity(sampleSection, "Sample"),
-          temperature: 0.2,
+          schema: ValidationClaritySchema,
         });
         llmClarity = data;
+        llmUsage = {
+          tokens_input: usage.input_tokens,
+          tokens_output: usage.output_tokens,
+          cache_read: usage.cache_read_input_tokens,
+          cache_creation: usage.cache_creation_input_tokens,
+          model: usage.model,
+        };
 
         if (data.issues.length > 0) {
           for (const issue of data.issues.slice(0, 3)) {
@@ -244,6 +250,7 @@ export async function POST(req: NextRequest) {
       remediations,
       passed: overall >= 70,
       llm_clarity: llmClarity,
+      llm_usage: llmUsage,
       word_count: wordCount,
     });
   } catch (error: unknown) {

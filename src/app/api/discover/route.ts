@@ -2,10 +2,18 @@
 // POST /api/discover
 // Handles: complexity classification, discovery questions,
 // product brief generation, feature generation, architecture
+// Uses Zod-validated structured output via llmParse.
 // ═══════════════════════════════════════════════════════════════
 
-import { NextRequest, NextResponse } from "next/server";
-import { llmCallJSON } from "@/lib/llm/client";
+import { NextResponse } from "next/server";
+import { llmParse } from "@/lib/llm/client";
+import {
+  ClassificationSchema,
+  DiscoveryQuestionSchema,
+  ProductBriefSchema,
+  FeaturesSchema,
+  ArchitectureSchema,
+} from "@/lib/llm/schemas";
 import {
   SYSTEM_DISCOVERY,
   SYSTEM_COMPLEXITY,
@@ -16,7 +24,7 @@ import {
   promptGenerateArchitecture,
 } from "@/lib/llm/prompts";
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { action } = body;
@@ -26,105 +34,111 @@ export async function POST(req: NextRequest) {
         const { description } = body;
         if (!description) return NextResponse.json({ error: "description required" }, { status: 400 });
 
-        const { data, meta } = await llmCallJSON<{
-          complexity: string;
-          is_agentic: boolean;
-          reasoning: string;
-          suggested_name: string;
-          one_liner: string;
-        }>({
+        const { data, usage } = await llmParse({
+          task: "classify",
           system: SYSTEM_COMPLEXITY,
           prompt: promptClassifyComplexity(description),
-          temperature: 0.3,
+          schema: ClassificationSchema,
         });
 
-        return NextResponse.json({ ...data, meta });
+        return NextResponse.json({
+          ...data,
+          meta: {
+            tokens_input: usage.input_tokens,
+            tokens_output: usage.output_tokens,
+            cache_read: usage.cache_read_input_tokens,
+            cache_creation: usage.cache_creation_input_tokens,
+            model: usage.model,
+          },
+        });
       }
 
       case "question": {
         const { description, phase, answers, complexity, is_agentic } = body;
 
-        const { data, meta } = await llmCallJSON<{
-          question: string;
-          why: string;
-          options: string[] | null;
-          field: string;
-          phase_complete: boolean;
-        }>({
+        const { data, usage } = await llmParse({
+          task: "question",
           system: SYSTEM_DISCOVERY,
           prompt: promptDiscoveryQuestion(description, phase, answers || [], complexity, is_agentic),
-          temperature: 0.7,
+          schema: DiscoveryQuestionSchema,
         });
 
-        return NextResponse.json({ ...data, meta });
+        return NextResponse.json({
+          ...data,
+          meta: {
+            tokens_input: usage.input_tokens,
+            tokens_output: usage.output_tokens,
+            cache_read: usage.cache_read_input_tokens,
+            cache_creation: usage.cache_creation_input_tokens,
+            model: usage.model,
+          },
+        });
       }
 
       case "brief": {
         const { description, answers } = body;
 
-        const { data, meta } = await llmCallJSON<{
-          name: string;
-          display_name: string;
-          one_liner: string;
-          vision: string;
-          target_user: string;
-          platform: string;
-          timeline: string;
-          out_of_scope: string[];
-          competitive: string;
-          is_agentic: boolean;
-        }>({
+        const { data, usage } = await llmParse({
+          task: "brief",
           system: SYSTEM_DISCOVERY,
           prompt: promptGenerateProductBrief(description, answers || []),
-          temperature: 0.5,
+          schema: ProductBriefSchema,
         });
 
-        return NextResponse.json({ ...data, meta });
+        return NextResponse.json({
+          ...data,
+          meta: {
+            tokens_input: usage.input_tokens,
+            tokens_output: usage.output_tokens,
+            cache_read: usage.cache_read_input_tokens,
+            cache_creation: usage.cache_creation_input_tokens,
+            model: usage.model,
+          },
+        });
       }
 
       case "features": {
         const { brief, answers, complexity } = body;
 
-        const { data, meta } = await llmCallJSON<{
-          features: Array<{
-            name: string;
-            description: string;
-            tier: string;
-            agent_role: string;
-            acceptance_criteria: string[];
-            edge_cases: string[];
-            error_handling: Array<{ condition: string; handling: string; user_message: string }>;
-          }>;
-          user_stories: string[];
-          nonfunctional: string[];
-        }>({
+        const { data, usage } = await llmParse({
+          task: "features",
           system: SYSTEM_DISCOVERY,
           prompt: promptGenerateFeatures(brief, answers || [], complexity),
-          maxTokens: 8192,
-          temperature: 0.6,
+          schema: FeaturesSchema,
         });
 
-        return NextResponse.json({ ...data, meta });
+        return NextResponse.json({
+          ...data,
+          meta: {
+            tokens_input: usage.input_tokens,
+            tokens_output: usage.output_tokens,
+            cache_read: usage.cache_read_input_tokens,
+            cache_creation: usage.cache_creation_input_tokens,
+            model: usage.model,
+          },
+        });
       }
 
       case "architecture": {
         const { brief, features, complexity, is_agentic, answers } = body;
 
-        const { data, meta } = await llmCallJSON<{
-          data_model: string;
-          api_design: string;
-          tech_stack: string;
-          security: string;
-          agentic_architecture: string;
-          state_management: string;
-        }>({
+        const { data, usage } = await llmParse({
+          task: "architecture",
           system: SYSTEM_DISCOVERY,
           prompt: promptGenerateArchitecture(brief, features, complexity, is_agentic, answers || []),
-          maxTokens: 8192,
-          temperature: 0.5,
+          schema: ArchitectureSchema,
         });
 
-        return NextResponse.json({ ...data, meta });
+        return NextResponse.json({
+          ...data,
+          meta: {
+            tokens_input: usage.input_tokens,
+            tokens_output: usage.output_tokens,
+            cache_read: usage.cache_read_input_tokens,
+            cache_creation: usage.cache_creation_input_tokens,
+            model: usage.model,
+          },
+        });
       }
 
       default:

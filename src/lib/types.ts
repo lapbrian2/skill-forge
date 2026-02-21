@@ -24,6 +24,7 @@ export interface Project {
   discovery: DiscoveryData;
   spec: GeneratedSpec | null;
   validation: ValidationReport | null;
+  token_usage: TokenUsageEntry[];
 }
 
 // ── Discovery Data: structured answers from interview ──────────
@@ -139,6 +140,20 @@ export interface Remediation {
   auto_fixable: boolean;
 }
 
+// ── Token Usage ───────────────────────────────────────────────
+// NOTE: Existing localStorage projects may lack token_usage.
+// Consumers should default to []
+
+export interface TokenUsageEntry {
+  task: string;           // e.g., "classify", "question", "generate"
+  model: string;          // e.g., "claude-haiku-4-5"
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  timestamp: string;      // ISO 8601
+}
+
 // ── LLM Types ──────────────────────────────────────────────────
 
 export interface DiscoveryQuestion {
@@ -175,6 +190,7 @@ export function createProject(description: string, complexity: Complexity = "mod
     discovery: createDiscoveryData(),
     spec: null,
     validation: null,
+    token_usage: [],
   };
 }
 
