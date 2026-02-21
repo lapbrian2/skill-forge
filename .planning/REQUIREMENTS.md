@@ -1,7 +1,7 @@
 # Requirements: Skill Forge
 
 **Defined:** 2026-02-20
-**Core Value:** User describes an idea in one paragraph and gets back a complete engineering spec they can paste into Claude Code and have it build — no ambiguity, no guessing.
+**Core Value:** User describes an idea in one paragraph and gets back a complete engineering spec they can paste into Claude Code and have it build -- no ambiguity, no guessing.
 
 ## v1 Requirements
 
@@ -19,7 +19,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Discovery Experience
 
 - [ ] **DISC-01**: Discovery displays as chat-style conversation (AI bubbles left, user right)
-- [ ] **DISC-02**: AI proposes answers with best practices — user confirms, modifies, or overrides (suggest-then-confirm)
+- [ ] **DISC-02**: AI proposes answers with best practices -- user confirms, modifies, or overrides (suggest-then-confirm)
 - [ ] **DISC-03**: AI suggestions include confidence level and reasoning (collapsible)
 - [ ] **DISC-04**: Discovery adapts question depth to project complexity (3-5 simple, 8-12 moderate, 15-20 complex)
 - [ ] **DISC-05**: AI maintains structured "understanding" object updated after each answer (not stateless)
@@ -29,8 +29,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Spec Generation
 
-- [ ] **SPEC-01**: Spec generates with streaming — user watches it materialize section by section
-- [ ] **SPEC-02**: Generated specs use concrete nouns, specific data models, API contracts — never vague
+- [ ] **SPEC-01**: Spec generates with streaming -- user watches it materialize section by section
+- [ ] **SPEC-02**: Generated specs use concrete nouns, specific data models, API contracts -- never vague
 - [ ] **SPEC-03**: System prompt is deeply engineered and baked into the code (the product's secret sauce)
 - [ ] **SPEC-04**: Spec echoes user's own terminology and domain language
 - [ ] **SPEC-05**: Spec sections are generated with few-shot examples of good vs bad specificity
@@ -48,13 +48,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **VAL-01**: Tollgate validation scores spec on completeness (0-100) with letter grade
 - [ ] **VAL-02**: Weasel word detection flags vague language in generated specs
-- [ ] **VAL-03**: Validation produces actionable remediations — specific, not generic
+- [ ] **VAL-03**: Validation produces actionable remediations -- specific, not generic
 - [ ] **VAL-04**: "Fix with AI" button on each remediation (AI fixes the specific issue)
 
 ### UX Polish
 
 - [ ] **UX-01**: Keyboard shortcuts: Cmd+Enter (submit/accept), Cmd+Shift+C (copy spec), Escape (dismiss)
-- [ ] **UX-02**: Error boundaries prevent full-page crashes — graceful recovery
+- [ ] **UX-02**: Error boundaries prevent full-page crashes -- graceful recovery
 - [ ] **UX-03**: Missing API key shows setup instructions (not generic error)
 - [ ] **UX-04**: Loading states show streaming progress, not static spinners
 - [ ] **UX-05**: Mobile-responsive layout for discovery conversation
@@ -72,9 +72,9 @@ Deferred to future release. Tracked but not in current roadmap.
 
 ### Advanced Features
 
-- **ADV-01**: Live spec assembly — watch spec sections build during discovery
+- **ADV-01**: Live spec assembly -- watch spec sections build during discovery
 - **ADV-02**: Domain-aware question branching (e-commerce vs SaaS vs mobile vs CLI)
-- **ADV-03**: Spec diff and iteration — compare versions, track changes
+- **ADV-03**: Spec diff and iteration -- compare versions, track changes
 - **ADV-04**: Consumer-optimized exports (Claude Code format, PDF, Jira stories)
 - **ADV-05**: One-click "Build with Claude Code" clipboard integration
 - **ADV-06**: Contextual help and explanation layer
@@ -138,16 +138,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UX-03 | Phase 4 | Pending |
 | UX-04 | Phase 4 | Pending |
 | UX-05 | Phase 4 | Pending |
-| DASH-01 | Phase 5 | Pending |
-| DASH-02 | Phase 5 | Pending |
-| DASH-03 | Phase 5 | Pending |
-| DASH-04 | Phase 5 | Pending |
+| DASH-01 | Phase 4 | Pending |
+| DASH-02 | Phase 4 | Pending |
+| DASH-03 | Phase 4 | Pending |
+| DASH-04 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 37 total
-- Mapped to phases: 37
-- Unmapped: 0 ✓
+- v1 requirements: 38 total
+- Mapped to phases: 38
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-20*
-*Last updated: 2026-02-20 after initial definition*
+*Last updated: 2026-02-20 after roadmap creation*
