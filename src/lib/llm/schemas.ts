@@ -30,6 +30,22 @@ export const DiscoveryQuestionSchema = z.object({
 
 export type DiscoveryQuestionOutput = z.infer<typeof DiscoveryQuestionSchema>;
 
+// ── Discovery Suggestion Schema (with proposed answer) ────────
+
+export const DiscoverySuggestionSchema = z.object({
+  question: z.string(),
+  why: z.string(),
+  options: z.array(z.string()).nullable(),
+  field: z.string(),
+  phase_complete: z.boolean(),
+  suggested_answer: z.string(),
+  confidence: z.enum(["high", "medium", "low"]),
+  reasoning: z.string(),
+  best_practice_note: z.string().nullable(),
+});
+
+export type DiscoverySuggestionOutput = z.infer<typeof DiscoverySuggestionSchema>;
+
 // ── Product Brief Schema ──────────────────────────────────────
 
 export const ProductBriefSchema = z.object({

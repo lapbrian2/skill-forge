@@ -10,6 +10,7 @@ import { llmParse } from "@/lib/llm/client";
 import {
   ClassificationSchema,
   DiscoveryQuestionSchema,
+  DiscoverySuggestionSchema,
   ProductBriefSchema,
   FeaturesSchema,
   ArchitectureSchema,
@@ -19,6 +20,7 @@ import {
   SYSTEM_COMPLEXITY,
   promptClassifyComplexity,
   promptDiscoveryQuestion,
+  promptDiscoverySuggestion,
   promptGenerateProductBrief,
   promptGenerateFeatures,
   promptGenerateArchitecture,
@@ -127,6 +129,31 @@ export async function POST(req: Request) {
           system: SYSTEM_DISCOVERY,
           prompt: promptGenerateArchitecture(brief, features, complexity, is_agentic, answers || []),
           schema: ArchitectureSchema,
+        });
+
+        return NextResponse.json({
+          ...data,
+          meta: {
+            tokens_input: usage.input_tokens,
+            tokens_output: usage.output_tokens,
+            cache_read: usage.cache_read_input_tokens,
+            cache_creation: usage.cache_creation_input_tokens,
+            model: usage.model,
+          },
+        });
+      }
+
+      case "suggest": {
+        const { description, phase, answers, complexity, is_agentic, understanding } = body;
+
+        const { data, usage } = await llmParse({
+          task: "question",
+          system: SYSTEM_DISCOVERY,
+          prompt: promptDiscoverySuggestion(
+            description, phase, answers || [],
+            complexity, is_agentic, understanding || {},
+          ),
+          schema: DiscoverySuggestionSchema,
         });
 
         return NextResponse.json({

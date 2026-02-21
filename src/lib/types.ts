@@ -63,6 +63,10 @@ export interface DiscoveryData {
   tollgate_1_passed: boolean;
   tollgate_2_passed: boolean;
   tollgate_3_passed: boolean;
+  // Chat-format message history (optional for backward compat)
+  chat_messages?: ChatMessage[];
+  // AI's structured understanding object (DISC-05)
+  understanding?: Record<string, unknown>;
 }
 
 export interface QAEntry {
@@ -70,6 +74,36 @@ export interface QAEntry {
   phase: Phase;
   question: string;
   answer: string;
+  timestamp: string;
+}
+
+// ── Chat Messages ─────────────────────────────────────────────
+
+export type ChatMessageRole = "ai" | "user" | "system";
+export type ChatMessageType =
+  | "question"
+  | "suggestion"
+  | "user_response"
+  | "phase_summary"
+  | "thinking";
+
+export interface AISuggestion {
+  proposed_answer: string;
+  confidence: "high" | "medium" | "low";
+  reasoning: string;
+  best_practice_note: string | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: ChatMessageRole;
+  type: ChatMessageType;
+  content: string;
+  phase: Phase;
+  field: string;
+  why?: string;
+  suggestion?: AISuggestion;
+  user_action?: "accept" | "edit" | "override";
   timestamp: string;
 }
 

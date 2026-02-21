@@ -108,6 +108,58 @@ Respond as JSON:
 }`;
 }
 
+export function promptDiscoverySuggestion(
+  description: string,
+  phase: string,
+  answers: Array<{ question: string; answer: string }>,
+  complexity: string,
+  isAgentic: boolean,
+  understanding: Record<string, unknown>,
+): string {
+  const answersText = answers.length > 0
+    ? answers.map((a, i) => `Q${i + 1}: ${a.question}\nA${i + 1}: ${a.answer}`).join("\n\n")
+    : "No questions asked yet.";
+
+  const understandingText = Object.keys(understanding).length > 0
+    ? JSON.stringify(understanding, null, 2)
+    : "No structured understanding yet.";
+
+  return `The user is building: "${description}"
+Complexity: ${complexity}
+Has agentic components: ${isAgentic}
+Current phase: ${phase}
+
+Current structured understanding:
+${understandingText}
+
+Previous Q&A:
+${answersText}
+
+Generate the next most important question for this phase AND propose a specific, best-practice answer that the user can confirm, modify, or override.
+
+Your proposed answer MUST be:
+- SPECIFIC: Name exact technologies, patterns, and approaches (not "a database" but "PostgreSQL with Prisma ORM")
+- OPINIONATED: Based on industry best practices for ${complexity} ${isAgentic ? "agentic" : ""} projects
+- ACTIONABLE: Something the user can confirm as-is or tweak slightly
+- CONTEXTUAL: Informed by all previous answers and the project description
+
+${phase === "discover" ? "Focus on: vision, target users, platform, timeline, scope boundaries, competitive landscape." : ""}
+${phase === "define" ? "Focus on: specific features with acceptance criteria, user stories, edge cases, non-functional requirements." : ""}
+${phase === "architect" ? "Focus on: data model decisions, API design, tech stack with justifications, security requirements." : ""}
+${isAgentic ? "Include agentic considerations: agent autonomy patterns, tool access, safety boundaries, failure modes, cost implications." : ""}
+
+Respond as JSON with these exact fields:
+- question: The specific question to ask
+- why: Why this matters for the spec (shown to user as context)
+- options: Array of possible choices (or null if open-ended)
+- field: Which discovery field this populates
+- phase_complete: Whether enough info has been gathered for this phase
+- suggested_answer: Your specific, best-practice proposed answer
+- confidence: "high", "medium", or "low" - how confident you are in this suggestion
+- reasoning: Brief explanation of why you're suggesting this (shown collapsible)
+- best_practice_note: Optional industry best practice note (or null)`;
+}
+
 export function promptGenerateProductBrief(
   description: string,
   answers: Array<{ question: string; answer: string }>
