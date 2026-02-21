@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Skill Forge",
-  description: "Engineering-grade skill and tool creation for AI agents",
+  description: "Engineering specification generator — describe an idea, get a build-ready spec for Claude Code",
 };
 
 export default function RootLayout({

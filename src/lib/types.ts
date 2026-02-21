@@ -1,140 +1,225 @@
-// SkillSpec and related types — ported from Python Pydantic models
+// ═══════════════════════════════════════════════════════════════
+// Skill Forge — Core Data Model
+// Version 2.0 — Engineering Specification Generator
+// ═══════════════════════════════════════════════════════════════
 
-export interface Parameter {
+// ── Project: The top-level entity ──────────────────────────────
+
+export type Complexity = "simple" | "moderate" | "complex";
+export type Phase = "discover" | "define" | "architect" | "specify" | "deliver";
+export type Grade = "A" | "B" | "C" | "D" | "F";
+export type FeatureTier = "must_have" | "should_have" | "could_have";
+export type AgentRole = "none" | "assist" | "own";
+
+export interface Project {
+  id: string;
   name: string;
-  type: string;
-  description: string;
-  required: boolean;
-  default?: unknown;
-  constraints?: Record<string, unknown>;
+  one_liner: string;
+  initial_description: string;
+  complexity: Complexity;
+  current_phase: Phase;
+  is_agentic: boolean;
+  created_at: string; // ISO 8601
+  updated_at: string;
+  discovery: DiscoveryData;
+  spec: GeneratedSpec | null;
+  validation: ValidationReport | null;
 }
 
-export interface Capability {
+// ── Discovery Data: structured answers from interview ──────────
+
+export interface DiscoveryData {
+  // Phase 1: Discover
+  phase1: {
+    vision: string;
+    target_user: string;
+    platform: string;
+    timeline: string;
+    out_of_scope: string[];
+    competitive: string;
+    agentic_notes: string;
+    complete: boolean;
+  };
+  // Phase 2: Define
+  phase2: {
+    features: Feature[];
+    user_stories: string[];
+    nonfunctional: string[];
+    complete: boolean;
+  };
+  // Phase 3: Architect
+  phase3: {
+    data_model: string; // LLM-generated markdown
+    api_design: string; // LLM-generated markdown
+    tech_stack: string; // LLM-generated markdown
+    security: string;   // LLM-generated markdown
+    agentic_architecture: string; // LLM-generated markdown (if agentic)
+    complete: boolean;
+  };
+  // Raw Q&A log
+  answers: QAEntry[];
+  // Tollgate statuses
+  tollgate_1_passed: boolean;
+  tollgate_2_passed: boolean;
+  tollgate_3_passed: boolean;
+}
+
+export interface QAEntry {
+  id: string;
+  phase: Phase;
+  question: string;
+  answer: string;
+  timestamp: string;
+}
+
+// ── Feature: individual feature within the spec ────────────────
+
+export interface Feature {
+  id: string;
   name: string;
   description: string;
-  required?: boolean;
-  deterministic?: boolean;
-  parameters?: Parameter[];
-  examples?: string[];
-  error_modes?: string[];
+  tier: FeatureTier;
+  agent_role: AgentRole;
+  acceptance_criteria: string[];
+  edge_cases: string[];
+  error_handling: ErrorHandler[];
 }
 
-export interface Example {
-  name?: string;
-  description?: string;
-  input: string | Record<string, unknown>;
-  expected_output: string | Record<string, unknown>;
-  notes?: string;
-}
-
-export interface ErrorSpec {
+export interface ErrorHandler {
   condition: string;
   handling: string;
-  user_message?: string;
+  user_message: string;
 }
 
-export interface InputSpec {
-  name: string;
-  type: string;
-  description: string;
-  required: boolean;
-}
+// ── Generated Spec: the final output document ──────────────────
 
-export interface OutputSpec {
-  name: string;
-  type: string;
-  description: string;
-}
-
-export interface SkillSpec {
-  name: string;
-  display_name?: string;
+export interface GeneratedSpec {
+  project_id: string;
   version: string;
-  description: string;
-  complexity?: "simple" | "moderate" | "complex";
-  author?: string;
-  problem_statement?: string;
-  target_user?: string;
-  trigger_patterns?: string[];
-  capabilities: Capability[];
-  inputs?: InputSpec[];
-  outputs?: OutputSpec[];
-  examples?: Example[];
-  edge_cases?: string[];
-  error_handling?: ErrorSpec[];
-  safety_boundaries?: string[];
-  target_frameworks?: string[];
-  dependencies?: string[];
-  tags?: string[];
-  metadata?: Record<string, unknown>;
+  markdown_content: string;
+  section_count: number;
+  word_count: number;
+  generated_at: string;
 }
 
-// Validation types
+// ── Validation Report ──────────────────────────────────────────
 
-export interface Remediation {
-  severity: "error" | "warning" | "info";
-  message: string;
-  tollgate: number;
-  location?: string;
-  suggested_fix?: string;
-  auto_fixable: boolean;
-}
-
-export interface Check {
-  name: string;
+export interface ValidationReport {
+  project_id: string;
+  spec_version: string;
+  timestamp: string;
+  tollgate_4: TollgateResult;
+  tollgate_5: TollgateResult;
+  overall_score: number;
+  grade: Grade;
+  remediations: Remediation[];
   passed: boolean;
-  detail: string;
 }
 
 export interface TollgateResult {
-  tollgate_number: number;
   name: string;
-  passed: boolean;
-  score: number;
   checks: Check[];
   passed_count: number;
   failed_count: number;
-  remediations: Remediation[];
+  score: number;
 }
 
-export interface ValidationReport {
-  skill_name: string;
-  skill_version?: string;
-  overall_score: number;
-  grade: string;
+export interface Check {
+  id: string;
+  description: string;
   passed: boolean;
-  tollgate_results: TollgateResult[];
-  total_checks: number;
-  passed_checks: number;
-  failed_checks: number;
-  remediations: Remediation[];
+  details?: string;
 }
 
-// Generator output types
-
-export interface GeneratedFile {
-  filename: string;
-  content: string;
-  framework: string;
-  type: string;
+export interface Remediation {
+  tollgate: number;
+  severity: "critical" | "warning" | "info";
+  section: string;
+  message: string;
+  auto_fixable: boolean;
 }
 
-// Empty spec for wizard initialization
-export function createEmptySpec(): SkillSpec {
+// ── LLM Types ──────────────────────────────────────────────────
+
+export interface DiscoveryQuestion {
+  id: string;
+  question: string;
+  why: string;
+  options: string[] | null;
+  phase: Phase;
+  required: boolean;
+}
+
+export interface LLMResponse<T> {
+  data: T;
+  tokens_used: number;
+  model: string;
+  latency_ms: number;
+}
+
+// ── Factory Functions ──────────────────────────────────────────
+
+export function createProject(description: string, complexity: Complexity = "moderate"): Project {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
   return {
+    id,
     name: "",
-    version: "1.0.0",
+    one_liner: "",
+    initial_description: description,
+    complexity,
+    current_phase: "discover",
+    is_agentic: false,
+    created_at: now,
+    updated_at: now,
+    discovery: createDiscoveryData(),
+    spec: null,
+    validation: null,
+  };
+}
+
+export function createDiscoveryData(): DiscoveryData {
+  return {
+    phase1: {
+      vision: "",
+      target_user: "",
+      platform: "",
+      timeline: "",
+      out_of_scope: [],
+      competitive: "",
+      agentic_notes: "",
+      complete: false,
+    },
+    phase2: {
+      features: [],
+      user_stories: [],
+      nonfunctional: [],
+      complete: false,
+    },
+    phase3: {
+      data_model: "",
+      api_design: "",
+      tech_stack: "",
+      security: "",
+      agentic_architecture: "",
+      complete: false,
+    },
+    answers: [],
+    tollgate_1_passed: false,
+    tollgate_2_passed: false,
+    tollgate_3_passed: false,
+  };
+}
+
+export function createFeature(): Feature {
+  return {
+    id: crypto.randomUUID(),
+    name: "",
     description: "",
-    complexity: "moderate",
-    author: "",
-    capabilities: [],
-    target_frameworks: ["claude"],
-    examples: [],
+    tier: "must_have",
+    agent_role: "none",
+    acceptance_criteria: [],
     edge_cases: [],
     error_handling: [],
-    safety_boundaries: [],
-    inputs: [],
-    outputs: [],
-    tags: [],
   };
 }

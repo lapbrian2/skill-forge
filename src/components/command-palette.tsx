@@ -3,11 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
-import {
-  Hammer, Plus, CheckCircle, Package, BookOpen, Search,
-  FileText, Server, Users, Link as LinkIcon, Sparkles,
-} from "lucide-react";
-import { EXAMPLES_INDEX } from "@/lib/examples";
+import { Hammer, Plus, Sparkles } from "lucide-react";
+import { listProjects } from "@/lib/storage";
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -28,6 +25,8 @@ export function CommandPalette() {
     setOpen(false);
     router.push(path);
   };
+
+  const projects = open ? listProjects().slice(0, 5) : [];
 
   if (!open) return null;
 
@@ -53,33 +52,26 @@ export function CommandPalette() {
             </Command.Empty>
 
             <Command.Group heading="Actions" className="text-xs text-white/30 px-2 py-1.5">
-              <CommandItem icon={Plus} label="Create New Skill" onSelect={() => go("/create")} />
-              <CommandItem icon={CheckCircle} label="Validate Spec" onSelect={() => go("/validate")} />
-              <CommandItem icon={Package} label="Generate Code" onSelect={() => go("/build")} />
-              <CommandItem icon={Search} label="Analyze Skill" onSelect={() => go("/analyze")} />
-              <CommandItem icon={Sparkles} label="Browse Examples" onSelect={() => go("/examples")} />
+              <CommandItem icon={Plus} label="New Spec" onSelect={() => go("/create")} />
               <CommandItem icon={Hammer} label="Dashboard" onSelect={() => go("/")} />
             </Command.Group>
 
-            <Command.Separator className="h-px bg-white/8 my-1" />
-
-            <Command.Group heading="Examples" className="text-xs text-white/30 px-2 py-1.5">
-              {EXAMPLES_INDEX.map(ex => {
-                const icons: Record<string, typeof FileText> = {
-                  claude: FileText, mcp: Server, crewai: Users, langchain: LinkIcon,
-                };
-                const Icon = icons[ex.framework] || FileText;
-                return (
-                  <CommandItem
-                    key={ex.name}
-                    icon={Icon}
-                    label={ex.display_name}
-                    subtitle={ex.framework}
-                    onSelect={() => go(`/examples/${ex.name}`)}
-                  />
-                );
-              })}
-            </Command.Group>
+            {projects.length > 0 && (
+              <>
+                <Command.Separator className="h-px bg-white/8 my-1" />
+                <Command.Group heading="Recent Specs" className="text-xs text-white/30 px-2 py-1.5">
+                  {projects.map(p => (
+                    <CommandItem
+                      key={p.id}
+                      icon={Sparkles}
+                      label={p.name || p.initial_description.slice(0, 50) || "Untitled"}
+                      subtitle={p.current_phase}
+                      onSelect={() => go(`/project/${p.id}`)}
+                    />
+                  ))}
+                </Command.Group>
+              </>
+            )}
           </Command.List>
 
           <div className="border-t border-white/8 px-4 py-2 text-xs text-white/30 flex items-center gap-4">

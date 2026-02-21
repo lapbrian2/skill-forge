@@ -3,16 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Hammer, Plus, CheckCircle, Package, BookOpen, Search, Command,
+  Hammer, Plus, Command,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: Hammer },
-  { href: "/create", label: "Create", icon: Plus },
-  { href: "/validate", label: "Validate", icon: CheckCircle },
-  { href: "/build", label: "Build", icon: Package },
-  { href: "/examples", label: "Examples", icon: BookOpen },
-  { href: "/analyze", label: "Analyze", icon: Search },
+  { href: "/create", label: "New Spec", icon: Plus },
 ];
 
 export function Navbar() {
@@ -22,7 +18,6 @@ export function Navbar() {
     <nav className="border-b border-border sticky top-0 z-50 bg-[#0A0A0A]/80 backdrop-blur-md">
       <div className="container mx-auto px-4 sm:px-6 max-w-6xl">
         <div className="flex items-center justify-between h-14">
-          {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
             <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
               <Hammer className="h-4 w-4 text-orange-500" />
@@ -30,7 +25,6 @@ export function Navbar() {
             <span className="font-semibold text-[15px] tracking-tight">Skill Forge</span>
           </Link>
 
-          {/* Nav Links */}
           <div className="flex items-center gap-0.5">
             {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
               const active = pathname === href || (href !== "/" && pathname.startsWith(href));
@@ -50,7 +44,6 @@ export function Navbar() {
               );
             })}
 
-            {/* Cmd+K trigger */}
             <button
               onClick={() => {
                 document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));

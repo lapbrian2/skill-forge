@@ -1,56 +1,63 @@
-import type { SkillSpec } from "./types";
+// ═══════════════════════════════════════════════════════════════
+// Skill Forge — Project Storage (localStorage V1)
+// Designed for easy swap to Supabase in V2
+// ═══════════════════════════════════════════════════════════════
 
-const SKILLS_KEY = "skillforge_skills";
-const DRAFT_KEY = "skillforge_draft";
+import type { Project } from "./types";
 
-export function saveSkill(spec: SkillSpec): void {
-  const skills = loadSkills();
-  const idx = skills.findIndex(s => s.name === spec.name);
-  if (idx >= 0) {
-    skills[idx] = spec;
-  } else {
-    skills.push(spec);
-  }
-  if (typeof window !== "undefined") {
-    localStorage.setItem(SKILLS_KEY, JSON.stringify(skills));
-  }
-}
+const PROJECTS_KEY = "skillforge_projects";
 
-export function loadSkills(): SkillSpec[] {
+// ── Read ───────────────────────────────────────────────────────
+
+export function listProjects(): Project[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(SKILLS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const raw = localStorage.getItem(PROJECTS_KEY);
+    if (!raw) return [];
+    const projects: Project[] = JSON.parse(raw);
+    return projects.sort((a, b) =>
+      new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
   } catch {
     return [];
   }
 }
 
-export function deleteSkill(name: string): void {
-  const skills = loadSkills().filter(s => s.name !== name);
-  if (typeof window !== "undefined") {
-    localStorage.setItem(SKILLS_KEY, JSON.stringify(skills));
-  }
+export function getProject(id: string): Project | null {
+  const projects = listProjects();
+  return projects.find(p => p.id === id) ?? null;
 }
 
-export function saveDraft(spec: Partial<SkillSpec>): void {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(spec));
+// ── Write ──────────────────────────────────────────────────────
+
+export function saveProject(project: Project): void {
+  if (typeof window === "undefined") return;
+  const projects = listProjects();
+  const idx = projects.findIndex(p => p.id === project.id);
+  const updated = { ...project, updated_at: new Date().toISOString() };
+
+  if (idx >= 0) {
+    projects[idx] = updated;
+  } else {
+    projects.push(updated);
   }
+
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
 }
 
-export function loadDraft(): Partial<SkillSpec> | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+export function deleteProject(id: string): void {
+  if (typeof window === "undefined") return;
+  const projects = listProjects().filter(p => p.id !== id);
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
 }
 
-export function clearDraft(): void {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem(DRAFT_KEY);
-  }
+// ── Helpers ────────────────────────────────────────────────────
+
+export function getProjectCount(): number {
+  return listProjects().length;
+}
+
+export function clearAllProjects(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(PROJECTS_KEY);
 }
