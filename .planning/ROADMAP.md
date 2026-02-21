@@ -28,11 +28,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Malformed LLM responses are caught and retried automatically -- user never sees a JSON parse error
   3. Token usage for a project is visible to the user (cost awareness)
   4. Different AI tasks visibly use appropriate models (fast responses for simple tasks, thorough responses for complex ones)
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Core LLM client: Zod schemas, per-task model config, streaming/retry/caching client refactor
+- [ ] 01-02-PLAN.md -- Token tracking: Project type update with token_usage, tracking utilities
+- [ ] 01-03-PLAN.md -- API routes and hook: Refactor all routes to use new infrastructure, create frontend stream consumer
 
 ### Phase 2: Discovery Experience
 **Goal**: Users have a conversation with a senior architect who does 80% of the thinking -- not a form to fill out
@@ -89,7 +90,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. LLM Infrastructure | 0/? | Not started | - |
+| 1. LLM Infrastructure | 0/3 | Planning complete | - |
 | 2. Discovery Experience | 0/? | Not started | - |
 | 3. Spec Generation and Output | 0/? | Not started | - |
 | 4. Validation, Dashboard, and Polish | 0/? | Not started | - |
