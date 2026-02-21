@@ -81,22 +81,50 @@ Acceptance criteria as testable statements ("GIVEN... WHEN... THEN...").
 Edge cases: minimum 3 per feature, specific to this feature.
 Error handling: condition → system response → user-visible message.
 
-═══ BANNED LANGUAGE ═══
+═══ ABSOLUTELY BANNED LANGUAGE — ZERO TOLERANCE ═══
 
-NEVER use these words or phrases. They are symptoms of vague thinking:
-- "various", "several", "multiple", "different" → Name the exact items
-- "etc.", "and so on", "and more" → List all items explicitly
-- "handles", "manages", "processes" → Describe the exact operations
-- "appropriate", "relevant", "necessary" → State the exact criteria
-- "properly", "correctly", "efficiently" → Define the exact behavior
-- "should", "might", "could" → Use "MUST" or "WILL" for requirements
-- "things", "stuff", "items" → Name the exact entities
-- "simple", "basic", "standard" → Describe the exact implementation
-- "supports", "provides", "enables" → Describe the exact mechanism
-- "real-time" → Specify: WebSocket, SSE, polling interval, max latency
-- "scalable" → Specify: target users, requests/sec, data volume
-- "secure" → Specify: auth method, encryption, access control rules
-- "user-friendly" → Specify: exact UI behavior, feedback, affordances
+Your specification will be automatically scored by a validation engine. The following words IMMEDIATELY lower your score. NEVER use them. Use the replacement shown.
+
+BANNED → REPLACEMENT:
+- "various" → Name each item: "JPEG, PNG, WebP, and SVG formats"
+- "several" → State the exact count: "3 retries" or "5 endpoints"
+- "multiple" → State the exact count or list: "4 user roles: admin, editor, viewer, guest"
+- "different" → Name the specific differences: "mobile (375px) and desktop (1280px) layouts"
+- "etc." / "and so on" / "and more" → List ALL items. No trailing-off.
+- "handles" / "handle" → Describe the exact operation: "validates the JWT token and extracts user_id from claims"
+- "manages" / "manage" → Describe what is done: "creates, reads, updates, and deletes workspace records"
+- "processes" / "process" → Describe each step: "receives the webhook payload, verifies the HMAC signature, and enqueues a background job"
+- "supports" / "support" → Describe the mechanism: "accepts file uploads via multipart/form-data up to 10MB"
+- "appropriate" / "relevant" / "necessary" → State the exact criteria: "files larger than 5MB" or "users with admin role"
+- "properly" / "correctly" / "efficiently" → Define the exact behavior: "returns within 200ms at the 95th percentile"
+- "should" / "might" / "could" → Use "MUST" or "WILL" for requirements
+- "things" / "stuff" → Name the exact entities
+- "items" → Name the specific type: "tasks", "files", "records"
+- "elements" → Name the specific component: "buttons", "form fields", "cards"
+- "aspects" / "factors" → Name the specific considerations
+- "simple" / "basic" / "standard" → Describe the exact implementation
+- "general" / "overall" / "essentially" / "basically" → Remove and be direct
+- "deal with" / "take care of" → Describe the exact action taken
+- "real-time" → Specify: "WebSocket connection with 50ms max latency"
+- "scalable" → Specify: "target 10,000 concurrent users, 500 requests/sec"
+- "secure" → Specify: "AES-256 encryption at rest, TLS 1.3 in transit, OAuth 2.0 + PKCE for auth"
+- "user-friendly" → Specify: "inline validation errors appear within 100ms, success toast displays for 3 seconds"
+
+SELF-CHECK: Before outputting each paragraph, scan for any of these words. If found, rewrite the sentence with concrete specifics.
+
+═══ MANDATORY VALIDATION REQUIREMENTS ═══
+
+Your spec MUST pass the following automated checks to score 95%+:
+
+1. VERSION NUMBER: Include "Version: 1.0" in the Product Overview section
+2. SUCCESS METRICS: Include a "Success Metrics" subsection with a table of at least 5 measurable KPIs
+3. IMPLEMENTATION ROADMAP: Include a "## 13. Implementation Roadmap" section with "Phase 1", "Phase 2" etc.
+4. DATA MODEL TYPES: Use TypeScript/SQL types (string, number, boolean, UUID, Date, integer, varchar, text, timestamp) for all data model fields
+5. API METHODS: Write HTTP methods explicitly (GET, POST, PUT, PATCH, DELETE) before each API endpoint path
+6. NO PLACEHOLDERS: Never write TODO, TBD, PLACEHOLDER, FIXME, or XXX
+7. ALL REQUIRED SECTIONS: Include every numbered section (## 1. through ## 13.) as specified in the document structure
+8. [ASSUMPTION] TAGS: Mark inferred details with [ASSUMPTION] tags (having them is good, they show transparency)
+9. WORD COUNT: Generate comprehensive content — aim for 3,000+ words for simple specs, 6,000+ for moderate, 10,000+ for complex
 
 ═══ STRUCTURAL RULES ═══
 
@@ -546,13 +574,31 @@ Phase 2+: remaining features, dependencies
 Risk register: Risk | Probability | Impact | Mitigation
 Technical debt items to address post-MVP
 
-═══ FINAL REMINDERS ═══
-- This spec will be pasted directly into Claude Code to build the app. ZERO ambiguity tolerance.
-- Every entity mentioned in the data model MUST appear in the API spec.
-- Every feature in the feature matrix MUST have a user flow.
-- Every error condition MUST have a user-facing message.
-- Mark anything you inferred (not explicitly stated by user) as [ASSUMPTION].
-- Use consistent names everywhere. If it's "workspace" in the data model, it's "workspace" in the API, flows, and UI.`;
+═══ CRITICAL QUALITY CHECKLIST — YOU MUST PASS ALL ═══
+
+Before outputting the spec, verify EVERY item below. Missing any item lowers the score below 95%.
+
+□ VERSION: "Version: 1.0" appears in Section 1 (Product Overview)
+□ SUCCESS METRICS: Section 1.3 has a table with 5+ measurable metrics (Metric | Target | Measurement Method)
+□ ALL SECTIONS PRESENT: Every ## N. heading from the structure above is present
+□ DATA MODEL TYPES: Every field in every data model table has an explicit type (string, number, UUID, boolean, Date, etc.)
+□ API METHODS: Every endpoint starts with a specific HTTP method (GET /path, POST /path, etc.)
+□ TYPESCRIPT INTERFACES: Every API request and response body is defined as a TypeScript interface
+□ ERROR TABLES: Every API endpoint has a table: Status | Code | Message
+□ USER FLOWS: Numbered steps with [IF/ELSE] decision points and error recovery for every major feature
+□ ACCEPTANCE CRITERIA: Every feature has GIVEN/WHEN/THEN format testable criteria
+□ EDGE CASES: At least 3 specific edge cases per feature
+□ IMPLEMENTATION ROADMAP: Section 13 has Phase 1 (MVP), Phase 2+, Risk Register
+□ NO BANNED WORDS: Zero instances of: various, several, multiple, different, etc., handles, manages, processes, supports, appropriate, relevant, necessary, properly, correctly, things, stuff, items, elements, aspects, factors, simple, basic, standard, general, overall, essentially, basically, deal with, take care of
+□ NO PLACEHOLDERS: Zero instances of TODO, TBD, PLACEHOLDER, FIXME, XXX
+□ [ASSUMPTION] TAGS: All inferred details marked with [ASSUMPTION]
+□ CONSISTENT NAMING: Same entity/field names used across ALL sections
+□ TECH VERSIONS: All technology choices include version numbers
+
+This spec will be pasted directly into Claude Code to build the app. ZERO ambiguity tolerance.
+Every entity mentioned in the data model MUST appear in the API spec.
+Every feature in the feature matrix MUST have a user flow.
+Every error condition MUST have a user-facing message.`;
 }
 
 export function promptRegenerateSection(

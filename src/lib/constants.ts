@@ -6,14 +6,17 @@
 // Flagged during Tollgate 4 clarity checks. These indicate vague,
 // non-buildable language that must be replaced with specifics.
 
+// High-confidence vague words. These are almost always symptoms of
+// hand-waving rather than specification. Common technical terms like
+// "items", "elements" are excluded since they appear in legitimate contexts
+// (e.g. "form elements", "list items", "DOM elements").
 export const WEASEL_WORDS = [
-  "various", "etc", "handle", "handles", "manage", "manages",
-  "process", "processes", "deal with", "take care of",
-  "support", "supports", "different", "multiple", "several",
-  "many", "some", "certain", "appropriate", "relevant",
-  "necessary", "general", "overall", "basically", "essentially",
-  "properly", "correctly", "things", "stuff", "items",
-  "elements", "aspects", "factors",
+  "various", "etc", "and so on", "and more",
+  "deal with", "take care of",
+  "several", "appropriate", "relevant",
+  "necessary", "basically", "essentially",
+  "properly", "correctly", "things", "stuff",
+  "aspects", "factors",
 ];
 
 // ── Validation Thresholds ──────────────────────────────────────
