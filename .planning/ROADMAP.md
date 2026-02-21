@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: LLM Infrastructure** - Production-grade streaming LLM client with structured outputs, retry logic, model selection, and token tracking
 - [x] **Phase 2: Discovery Experience** - Chat-style conversational discovery where AI proposes answers and user confirms, with adaptive depth and session persistence
-- [ ] **Phase 3: Spec Generation and Output** - Streaming spec generation producing specific, buildable engineering documents with rich markdown rendering and export
+- [x] **Phase 3: Spec Generation and Output** - Streaming spec generation producing specific, buildable engineering documents with rich markdown rendering and export
 - [ ] **Phase 4: Validation, Dashboard, and Polish** - Quality validation with AI-powered remediation, project dashboard, keyboard shortcuts, error handling, and mobile support
 
 ## Phase Details
@@ -92,9 +92,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. LLM Infrastructure | 3/3 | Complete | 2026-02-20 |
 | 2. Discovery Experience | 2/2 | Complete | 2026-02-20 |
-| 3. Spec Generation and Output | 0/? | Not started | - |
+| 3. Spec Generation and Output | 2/2 | Complete | 2026-02-20 |
 | 4. Validation, Dashboard, and Polish | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-02-20*
-*Last updated: 2026-02-20 after Phase 2 execution*
+*Last updated: 2026-02-20 after Phase 3 execution*

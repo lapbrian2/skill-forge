@@ -15,7 +15,10 @@ import { shouldPhaseComplete } from "@/lib/discovery/adaptive-depth";
 import { ChatContainer } from "@/components/discovery/chat-container";
 import { SkipButton } from "@/components/discovery/skip-button";
 import { SpecViewer } from "@/components/spec/spec-viewer";
+import { ValidationPanel } from "@/components/spec/validation-panel";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { useLLMStream } from "@/hooks/use-llm-stream";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { replaceSection, parseSpecSections } from "@/lib/spec/section-parser";
 import type { Project, Phase, QAEntry, ChatMessage } from "@/lib/types";
 import { toast } from "sonner";
@@ -449,6 +452,16 @@ export default function ProjectPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream.isStreaming, stream.text]);
 
+  // Keyboard shortcuts (UX-01)
+  useKeyboardShortcuts({
+    onCopySpec: () => {
+      if (specMarkdown) {
+        navigator.clipboard.writeText(specMarkdown);
+        toast.success("Spec copied to clipboard!");
+      }
+    },
+  });
+
   if (!project) {
     return <div className="text-center text-white/30 py-20">Loading...</div>;
   }
@@ -459,6 +472,7 @@ export default function ProjectPage() {
     (project.current_phase === "deliver" && specMarkdown);
 
   return (
+    <ErrorBoundary>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -575,6 +589,22 @@ export default function ProjectPage() {
           </motion.div>
         )}
 
+        {/* Validation Panel (shown when spec has been validated) */}
+        {project.current_phase === "deliver" && project.validation && !stream.isStreaming && (
+          <motion.div
+            key="validation"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <ValidationPanel
+              validation={project.validation}
+              onFixSection={handleRegenerateSection}
+              isFixing={regeneratingSection !== null}
+            />
+          </motion.div>
+        )}
+
         {/* Spec Viewer: Streaming or Delivered */}
         {showSpecViewer && (
           <motion.div
@@ -593,6 +623,7 @@ export default function ProjectPage() {
         )}
       </AnimatePresence>
     </div>
+    </ErrorBoundary>
   );
 }
 
