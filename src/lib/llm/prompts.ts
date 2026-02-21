@@ -118,13 +118,14 @@ Your spec MUST pass the following automated checks to score 95%+:
 
 1. VERSION NUMBER: Include "Version: 1.0" in the Product Overview section
 2. SUCCESS METRICS: Include a "Success Metrics" subsection with a table of at least 5 measurable KPIs
-3. IMPLEMENTATION ROADMAP: Include a "## 13. Implementation Roadmap" section with "Phase 1", "Phase 2" etc.
+3. IMPLEMENTATION ROADMAP: Include a "## 14. Implementation Roadmap" section with "Phase 1", "Phase 2" etc.
 4. DATA MODEL TYPES: Use TypeScript/SQL types (string, number, boolean, UUID, Date, integer, varchar, text, timestamp) for all data model fields
 5. API METHODS: Write HTTP methods explicitly (GET, POST, PUT, PATCH, DELETE) before each API endpoint path
 6. NO PLACEHOLDERS: Never write TODO, TBD, PLACEHOLDER, FIXME, or XXX
-7. ALL REQUIRED SECTIONS: Include every numbered section (## 1. through ## 13.) as specified in the document structure
-8. [ASSUMPTION] TAGS: Mark inferred details with [ASSUMPTION] tags (having them is good, they show transparency)
-9. WORD COUNT: Generate comprehensive content — aim for 3,000+ words for simple specs, 6,000+ for moderate, 10,000+ for complex
+7. ALL REQUIRED SECTIONS: Include every numbered section (## 1. through ## 14.) as specified in the document structure
+8. UI ARCHITECTURE: Include "## 9. UI Architecture" with design tokens, component hierarchy, layout patterns, interaction states, and accessibility requirements
+9. [ASSUMPTION] TAGS: Mark inferred details with [ASSUMPTION] tags (having them is good, they show transparency)
+10. WORD COUNT: Generate comprehensive content — aim for 3,000+ words for simple specs, 6,000+ for moderate, 10,000+ for complex
 
 ═══ STRUCTURAL RULES ═══
 
@@ -385,7 +386,11 @@ Generate as JSON:
 }`;
 }
 
-export function promptGenerateSpec(
+/**
+ * Generate spec Part 1: Sections 1-8 (core sections).
+ * Optimized to complete within Vercel Hobby 60s timeout.
+ */
+export function promptGenerateSpecPart1(
   project: string,
   complexity: string,
   sections: number[],
@@ -398,7 +403,7 @@ export function promptGenerateSpec(
   const minStories = complexity === "simple" ? "5" : complexity === "moderate" ? "8" : "12";
   const minFlows = complexity === "simple" ? "3" : complexity === "moderate" ? "4" : "6";
 
-  return `Generate a COMPLETE engineering specification for this project. You MUST include ALL sections listed below — a truncated spec is worthless. Prioritize COMPLETENESS over verbosity.
+  return `Generate Part 1 (sections 1-8) of an engineering specification. Be specific and concise — use tables and TypeScript interfaces, not prose.
 
 PROJECT DATA:
 ${project}
@@ -406,9 +411,7 @@ ${project}
 COMPLEXITY: ${complexity}
 ${termBlock}
 
-CRITICAL CONSTRAINT: You have a limited output budget. Be specific but concise. Use tables and TypeScript interfaces (not prose) for data models and APIs. Every section MUST be present — budget your output accordingly.
-
-MANDATORY ELEMENTS (automated scoring checks for these):
+MANDATORY ELEMENTS FOR PART 1:
 - "Version: 1.0" in Section 1
 - Success Metrics table (5+ rows) in Section 1.3
 - Data model fields with explicit types (string, number, UUID, boolean, Date)
@@ -418,11 +421,10 @@ MANDATORY ELEMENTS (automated scoring checks for these):
 - Numbered user flows with [IF/ELSE] decision points
 - GIVEN/WHEN/THEN acceptance criteria per feature
 - Tech stack with version numbers
-- Phase 1/Phase 2 roadmap with risk register
 - Zero TODO/TBD/PLACEHOLDER text
 - [ASSUMPTION] tags on inferred details
 
-═══ DOCUMENT STRUCTURE (generate ALL sections) ═══
+═══ GENERATE THESE SECTIONS ═══
 
 # [App Name] — Engineering Specification
 
@@ -450,17 +452,130 @@ ${minFlows}+ flows with numbered steps, [IF/ELSE] branches, error recovery
 ## 8. Technical Architecture
 Tech stack table (Layer | Technology | Version | Justification), system architecture, module/folder structure
 
-${sections.includes(9) ? `## 9. Agentic Architecture\nAgent inventory, orchestration, MCP design, safety boundaries, cost model\n` : ""}${sections.includes(10) ? `## 10. State Management\nClient state strategy, server state caching, real-time sync\n` : ""}${sections.includes(11) ? `## 11. Security Architecture\nAuth method, role permissions table, data protection, input validation, rate limits\n` : ""}${sections.includes(12) ? `## 12. Non-Functional Requirements\nTable: Category | Requirement | Target | Measurement (performance, scalability, accessibility, browser support)\n` : ""}
-## 13. Implementation Roadmap
-Phase 1 (MVP): features + timeline. Phase 2: features + dependencies. Risk register table (Risk | Probability | Impact | Mitigation).
-
-FINAL RULES:
-- ALL sections above MUST be present — do NOT skip any section
+RULES:
+- Generate ONLY sections 1 through 8 — stop after section 8
 - Use tables and code blocks, not lengthy prose
 - Include "Version: 1.0" in the first section
 - No banned vague words (various, several, etc., handles, manages, supports, appropriate, properly, things, stuff)
 - Mark inferred details with [ASSUMPTION]
 - Consistent entity names across all sections`;
+}
+
+/**
+ * Generate spec Part 2: Remaining sections (9-13).
+ * Takes Part 1 output as context for consistency.
+ * Optimized to complete within Vercel Hobby 60s timeout.
+ */
+export function promptGenerateSpecPart2(
+  project: string,
+  complexity: string,
+  sections: number[],
+  part1Content: string,
+  terminology: string[] = [],
+): string {
+  const termBlock = terminology.length > 0
+    ? `\nUSER TERMINOLOGY — use these exact terms: ${terminology.map(t => `"${t}"`).join(", ")}\n`
+    : "";
+
+  // Extract entity names from Part 1 for consistency
+  const entityNames = part1Content.match(/\b[A-Z][a-z]+(?:[A-Z][a-z]+)*\b/g) || [];
+  const uniqueEntities = [...new Set(entityNames)].slice(0, 30).join(", ");
+
+  // Extract tech stack mentions for consistency
+  const techMentions = part1Content.match(/\b(Next\.js|React|Node\.js|Bun|PostgreSQL|Supabase|Prisma|Drizzle|Tailwind|TypeScript|Vite|Redis|MongoDB)\s*\d*\.?\d*/gi) || [];
+  const uniqueTech = [...new Set(techMentions)].join(", ");
+
+  // Build the section instructions for Part 2
+  const sectionInstructions: string[] = [];
+
+  if (sections.includes(9)) {
+    sectionInstructions.push(`## 9. UI Architecture
+
+### 9.1 Design System
+Color tokens table (Token | Light Value | Dark Value | Usage), typography scale table (Level | Font | Size | Weight | Line Height), spacing grid (4px base unit, named tokens: xs=4, sm=8, md=16, lg=24, xl=32, 2xl=48)
+
+### 9.2 Component Hierarchy
+Component tree showing parent-child relationships with key props for each component. Use indented list format:
+- Layout (theme, sidebar)
+  - Header (user, notifications)
+  - Sidebar (navItems, collapsed)
+  - MainContent (children)
+    - PageComponent (data, loading)
+
+### 9.3 Layout Patterns
+Responsive breakpoints table (Name | Min Width | Layout | Columns | Container), page layout patterns (sidebar, stacked, split)
+
+### 9.4 Interaction States
+State matrix table (Component | Default | Hover | Focus | Active | Loading | Error | Empty | Disabled) for key interactive components
+
+### 9.5 Accessibility Requirements
+WCAG 2.2 AA compliance targets, ARIA patterns table (Component | ARIA Role | ARIA Properties | Keyboard Nav), color contrast ratios (normal text 4.5:1, large text 3:1), focus management strategy, screen reader considerations`);
+  }
+
+  if (sections.includes(10)) {
+    sectionInstructions.push(`## 10. Agentic Architecture
+Agent inventory table (Agent | Role | Tools | Autonomy Level), orchestration pattern, MCP server design, safety boundaries, cost model per operation`);
+  }
+
+  if (sections.includes(11)) {
+    sectionInstructions.push(`## 11. State Management
+Client state strategy (which library, what goes where), server state caching (TTL, invalidation), real-time sync approach if applicable`);
+  }
+
+  if (sections.includes(12)) {
+    sectionInstructions.push(`## 12. Security Architecture
+Auth method + flow, role permissions table (Role | Permissions), data protection (encryption at rest/transit), input validation rules, rate limiting table (Endpoint | Limit | Window)`);
+  }
+
+  if (sections.includes(13)) {
+    sectionInstructions.push(`## 13. Non-Functional Requirements
+Table: Category | Requirement | Target | Measurement — cover performance, scalability, accessibility (WCAG level), browser support, SEO, i18n`);
+  }
+
+  sectionInstructions.push(`## 14. Implementation Roadmap
+Phase 1 (MVP): features + timeline + success criteria. Phase 2: features + dependencies. Phase 3 if applicable. Risk register table (Risk | Probability | Impact | Mitigation) with 5+ rows.`);
+
+  return `Generate Part 2 (remaining sections) of an engineering specification. This continues from Part 1 which has already been generated.
+
+PROJECT DATA:
+${project}
+
+COMPLEXITY: ${complexity}
+${termBlock}
+
+ENTITY NAMES FROM PART 1 (use these exact names for consistency):
+${uniqueEntities}
+
+TECH STACK FROM PART 1 (reference these exact versions):
+${uniqueTech}
+
+═══ GENERATE THESE SECTIONS ═══
+
+${sectionInstructions.join("\n\n")}
+
+RULES:
+- Generate ONLY the sections listed above — do NOT repeat sections 1-8
+- Do NOT output a document title (# heading) — just start with the first ## section
+- Use the SAME entity names, field names, and technology references as Part 1
+- Use tables and code blocks, not lengthy prose
+- No banned vague words (various, several, etc., handles, manages, supports, appropriate, properly, things, stuff)
+- Mark inferred details with [ASSUMPTION]
+- Phase 1/Phase 2 roadmap MUST reference specific features from Part 1
+- Risk register MUST have 5+ rows with specific risks for this project
+- Zero TODO/TBD/PLACEHOLDER text`;
+}
+
+/**
+ * @deprecated Use promptGenerateSpecPart1 + promptGenerateSpecPart2 for chunked generation.
+ * Kept for backward compatibility with single-call generation.
+ */
+export function promptGenerateSpec(
+  project: string,
+  complexity: string,
+  sections: number[],
+  terminology: string[] = [],
+): string {
+  return promptGenerateSpecPart1(project, complexity, sections, terminology);
 }
 
 export function promptRegenerateSection(

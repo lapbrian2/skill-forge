@@ -219,9 +219,17 @@ export default function ProjectPage() {
   // Track the last phase_complete flag from the API
   const lastPhaseCompleteRef = useRef(false);
 
-  // Generate spec using streaming
+  // Track generation phase for two-call orchestration
+  const genPhaseRef = useRef<"idle" | "part1" | "part2">("idle");
+  const genProjectRef = useRef<Project | null>(null);
+
+  // Generate spec using two-call streaming strategy:
+  // Call 1: /api/generate → sections 1-8
+  // Call 2: /api/generate-continue → sections 9-13 (auto-triggered)
   const generateSpec = useCallback(async (proj: Project) => {
     stream.reset();
+    genPhaseRef.current = "part1";
+    genProjectRef.current = proj;
 
     await stream.startStream("/api/generate", {
       project_data: {
@@ -401,14 +409,45 @@ export default function ProjectPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sectionStream.isStreaming, sectionStream.text, regeneratingSection]);
 
-  // When full spec streaming completes, save the spec
+  // When streaming completes, orchestrate two-phase generation:
+  // Part 1 done → auto-start Part 2
+  // Part 2 done → save + validate
   const specSavedRef = useRef(false);
   useEffect(() => {
     if (stream.isStreaming) {
       specSavedRef.current = false; // Reset when a new stream starts
+      return;
     }
+
+    // Stream just finished — check which phase
     if (!stream.isStreaming && stream.text && project && !specSavedRef.current) {
+      // Part 1 just completed — auto-trigger Part 2
+      if (genPhaseRef.current === "part1") {
+        genPhaseRef.current = "part2";
+        const proj = genProjectRef.current || project;
+
+        // Add a separator between parts for clean stitching
+        const part1Content = stream.text;
+
+        // Start Part 2 — appends to existing text
+        stream.continueStream("/api/generate-continue", {
+          project_data: {
+            name: proj.name,
+            one_liner: proj.one_liner,
+            description: proj.initial_description,
+            complexity: proj.complexity,
+            is_agentic: proj.is_agentic,
+            discovery: proj.discovery,
+          },
+          complexity: proj.complexity,
+          part1_content: part1Content,
+        });
+        return;
+      }
+
+      // Part 2 completed (or single-call fallback) — save and validate
       specSavedRef.current = true;
+      genPhaseRef.current = "idle";
       const content = stream.text;
       const sectionMatches = content.match(/^## \d+\./gm);
       const spec = {

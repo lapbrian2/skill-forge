@@ -81,7 +81,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "spec_content required" }, { status: 400 });
     }
 
-    const sections = required_sections || [1, 2, 3, 4, 5, 6, 7, 8, 13];
+    const sections = required_sections || [1, 2, 3, 4, 5, 6, 7, 8, 9, 14];
     const remediations: Remediation[] = [];
     const wordCount = spec_content.split(/\s+/).length;
 
@@ -227,6 +227,14 @@ export async function POST(req: Request) {
       passed: hasNumberedSteps,
     });
 
+    // 4.13: Has UI Architecture section (design tokens, component hierarchy, interaction states)
+    const hasUIArch = /ui\s+architecture|design\s+(system|tokens)|component\s+hierarchy|interaction\s+states/i.test(spec_content);
+    t4Checks.push({
+      id: "has_ui_architecture",
+      description: "UI Architecture section with design system and components",
+      passed: hasUIArch,
+    });
+
     const t4Passed = t4Checks.filter(c => c.passed).length;
     const t4Score = t4Checks.length > 0 ? Math.round((t4Passed / t4Checks.length) * 100) : 0;
 
@@ -295,7 +303,7 @@ export async function POST(req: Request) {
       passed: hasMetrics,
     });
 
-    // 5.5: Has implementation roadmap
+    // 5.5: Has implementation roadmap (section 14, was 13)
     const hasRoadmap = /roadmap|implementation\s+(plan|roadmap)|phase\s+\d/i.test(spec_content);
     t5Checks.push({
       id: "has_roadmap",

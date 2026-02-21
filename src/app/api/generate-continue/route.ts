@@ -1,13 +1,13 @@
 // ═══════════════════════════════════════════════════════════════
-// POST /api/generate
-// Streams the full engineering specification document
-// token-by-token via SSE using Anthropic SDK streaming.
-// Optimized for Vercel Hobby 60s timeout — uses concise prompt
-// and 12K token budget to complete within time limit.
+// POST /api/generate-continue
+// Streams Part 2 of the engineering specification (sections 9-13).
+// Called after /api/generate completes Part 1 (sections 1-8).
+// This two-call strategy ensures each call completes within
+// Vercel Hobby's 60-second function timeout.
 // ═══════════════════════════════════════════════════════════════
 
 import { llmStream } from "@/lib/llm/client";
-import { SYSTEM_GENERATOR, promptGenerateSpecPart1 } from "@/lib/llm/prompts";
+import { SYSTEM_GENERATOR, promptGenerateSpecPart2 } from "@/lib/llm/prompts";
 import { COMPLEXITY_CONFIG } from "@/lib/constants";
 import { extractTerminology } from "@/lib/spec/terminology";
 import type { Complexity, QAEntry } from "@/lib/types";
@@ -18,19 +18,19 @@ export const maxDuration = 300;
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { project_data, complexity } = body;
+    const { project_data, complexity, part1_content } = body;
 
-    if (!project_data) {
-      return new Response(JSON.stringify({ error: "project_data required" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!project_data || !part1_content) {
+      return new Response(
+        JSON.stringify({ error: "project_data and part1_content required" }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
     }
 
     const cx = (complexity || "moderate") as Complexity;
     const sections = COMPLEXITY_CONFIG[cx].sections as unknown as number[];
 
-    // Extract terminology from user's discovery answers (SPEC-04)
+    // Extract terminology from user's discovery answers
     const description = project_data.description || project_data.one_liner || "";
     const answers: QAEntry[] = project_data.discovery?.answers || [];
     const terminology = extractTerminology(description, answers);
@@ -38,10 +38,11 @@ export async function POST(req: Request) {
     const stream = await llmStream({
       task: "generate",
       system: SYSTEM_GENERATOR,
-      prompt: promptGenerateSpecPart1(
+      prompt: promptGenerateSpecPart2(
         JSON.stringify(project_data, null, 2),
         cx,
         sections,
+        part1_content,
         terminology,
       ),
     });
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("[/api/generate]", message);
+    console.error("[/api/generate-continue]", message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },

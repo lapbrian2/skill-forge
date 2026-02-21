@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 // Skill Forge — Streaming LLM Consumer Hook
 // React hook for consuming SSE streams from API routes.
+// Supports multi-call stitching for chunked generation.
 // Uses manual SSE parsing for lightweight client bundle.
 // ═══════════════════════════════════════════════════════════════
 
@@ -24,6 +25,8 @@ interface StreamState {
 
 interface UseLLMStreamReturn extends StreamState {
   startStream: (url: string, body: object) => Promise<void>;
+  /** Continue streaming and append to existing text (for multi-call stitching) */
+  continueStream: (url: string, body: object) => Promise<void>;
   abort: () => void;
   reset: () => void;
 }
@@ -34,6 +37,10 @@ interface UseLLMStreamReturn extends StreamState {
  * React hook for consuming SSE streams from LLM API routes.
  * Accumulates text incrementally, provides abort support,
  * and captures usage data from the stream.
+ *
+ * Supports two modes:
+ * - `startStream()`: Resets text and streams from scratch
+ * - `continueStream()`: Appends to existing text (for multi-call stitching)
  */
 export function useLLMStream(): UseLLMStreamReturn {
   const [state, setState] = useState<StreamState>({
@@ -43,14 +50,28 @@ export function useLLMStream(): UseLLMStreamReturn {
     usage: null,
   });
   const abortRef = useRef<AbortController | null>(null);
+  // Ref to track accumulated text across re-renders
+  const accumulatedRef = useRef("");
 
-  const startStream = useCallback(async (url: string, body: object) => {
+  /**
+   * Core streaming logic shared between startStream and continueStream.
+   * @param url API endpoint
+   * @param body Request body
+   * @param initialText Text to prepend (empty for startStream, existing text for continueStream)
+   */
+  const doStream = useCallback(async (url: string, body: object, initialText: string) => {
     // Abort any existing stream
     abortRef.current?.abort();
     abortRef.current = new AbortController();
 
-    // Reset state
-    setState({ text: "", isStreaming: true, error: null, usage: null });
+    // Set initial state
+    accumulatedRef.current = initialText;
+    setState({
+      text: initialText,
+      isStreaming: true,
+      error: null,
+      usage: null,
+    });
 
     try {
       const response = await fetch(url, {
@@ -80,7 +101,6 @@ export function useLLMStream(): UseLLMStreamReturn {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let accumulatedText = "";
       let inputTokens = 0;
       let outputTokens = 0;
 
@@ -111,10 +131,11 @@ export function useLLMStream(): UseLLMStreamReturn {
               event.delta?.type === "text_delta" &&
               event.delta?.text
             ) {
-              accumulatedText += event.delta.text;
+              accumulatedRef.current += event.delta.text;
+              const currentText = accumulatedRef.current;
               setState(prev => ({
                 ...prev,
-                text: accumulatedText,
+                text: currentText,
               }));
             }
 
@@ -159,6 +180,18 @@ export function useLLMStream(): UseLLMStreamReturn {
     }
   }, []);
 
+  /** Start a new stream — resets all text */
+  const startStream = useCallback(async (url: string, body: object) => {
+    await doStream(url, body, "");
+  }, [doStream]);
+
+  /** Continue streaming — appends to existing text (for multi-call stitching) */
+  const continueStream = useCallback(async (url: string, body: object) => {
+    // Add separator between parts for clean stitching
+    const existingText = accumulatedRef.current.trimEnd() + "\n\n";
+    await doStream(url, body, existingText);
+  }, [doStream]);
+
   const abort = useCallback(() => {
     abortRef.current?.abort();
     setState(prev => ({ ...prev, isStreaming: false }));
@@ -166,12 +199,14 @@ export function useLLMStream(): UseLLMStreamReturn {
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
+    accumulatedRef.current = "";
     setState({ text: "", isStreaming: false, error: null, usage: null });
   }, []);
 
   return {
     ...state,
     startStream,
+    continueStream,
     abort,
     reset,
   };

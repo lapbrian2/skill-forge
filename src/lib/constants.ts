@@ -59,21 +59,21 @@ export const COMPLEXITY_CONFIG = {
     label: "Simple",
     questions: { min: 3, max: 5 },
     specPages: { min: 2, max: 4 },
-    sections: [1, 2, 3, 4, 5, 6, 7, 8, 10, 13],
+    sections: [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 14],
     description: "CRUD apps, landing pages, basic tools",
   },
   moderate: {
     label: "Moderate",
     questions: { min: 8, max: 12 },
     specPages: { min: 6, max: 12 },
-    sections: [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13],
+    sections: [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14],
     description: "Multi-feature apps, dashboards, integrations",
   },
   complex: {
     label: "Complex",
     questions: { min: 15, max: 20 },
     specPages: { min: 12, max: 25 },
-    sections: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+    sections: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
     description: "Agentic systems, multi-agent, MCP, real-time",
   },
 } as const;
@@ -98,11 +98,12 @@ export const SPEC_SECTIONS = [
   { number: 6, title: "API Specification", required: true },
   { number: 7, title: "Key User Flows", required: true },
   { number: 8, title: "Technical Architecture", required: true },
-  { number: 9, title: "Agentic Architecture", required: false },
-  { number: 10, title: "State Management", required: false },
-  { number: 11, title: "Security Architecture", required: false },
-  { number: 12, title: "Non-Functional Requirements", required: false },
-  { number: 13, title: "Implementation Roadmap", required: true },
+  { number: 9, title: "UI Architecture", required: true },
+  { number: 10, title: "Agentic Architecture", required: false },
+  { number: 11, title: "State Management", required: false },
+  { number: 12, title: "Security Architecture", required: false },
+  { number: 13, title: "Non-Functional Requirements", required: false },
+  { number: 14, title: "Implementation Roadmap", required: true },
 ];
 
 // ── LLM Config ─────────────────────────────────────────────────
