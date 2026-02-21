@@ -392,213 +392,75 @@ export function promptGenerateSpec(
   terminology: string[] = [],
 ): string {
   const termBlock = terminology.length > 0
-    ? `\n═══ USER TERMINOLOGY ═══\nUse these exact terms throughout the spec (the user used these words during discovery):\n${terminology.map(t => `- "${t}"`).join("\n")}\nDo NOT substitute synonyms. Mirror the user's language.\n`
+    ? `\nUSER TERMINOLOGY — use these exact terms: ${terminology.map(t => `"${t}"`).join(", ")}\n`
     : "";
 
-  return `Generate a complete engineering specification document for this project.
+  const minStories = complexity === "simple" ? "5" : complexity === "moderate" ? "8" : "12";
+  const minFlows = complexity === "simple" ? "3" : complexity === "moderate" ? "4" : "6";
+
+  return `Generate a COMPLETE engineering specification for this project. You MUST include ALL sections listed below — a truncated spec is worthless. Prioritize COMPLETENESS over verbosity.
 
 PROJECT DATA:
 ${project}
 
 COMPLEXITY: ${complexity}
-SECTIONS TO GENERATE: ${sections.join(", ")}
 ${termBlock}
-═══ FEW-SHOT EXAMPLES: GOOD vs BAD ═══
 
-EXAMPLE 1 — Data Model Field Definition:
+CRITICAL CONSTRAINT: You have a limited output budget. Be specific but concise. Use tables and TypeScript interfaces (not prose) for data models and APIs. Every section MUST be present — budget your output accordingly.
 
-BAD (vague, not buildable):
-"The user has standard profile fields and preferences."
+MANDATORY ELEMENTS (automated scoring checks for these):
+- "Version: 1.0" in Section 1
+- Success Metrics table (5+ rows) in Section 1.3
+- Data model fields with explicit types (string, number, UUID, boolean, Date)
+- API endpoints with HTTP methods (GET/POST/PUT/PATCH/DELETE /path)
+- TypeScript interfaces for request/response bodies
+- Error tables (Status | Code | Message)
+- Numbered user flows with [IF/ELSE] decision points
+- GIVEN/WHEN/THEN acceptance criteria per feature
+- Tech stack with version numbers
+- Phase 1/Phase 2 roadmap with risk register
+- Zero TODO/TBD/PLACEHOLDER text
+- [ASSUMPTION] tags on inferred details
 
-GOOD (specific, buildable):
-| Field | Type | Required | Constraints | Default | Description |
-|-------|------|----------|-------------|---------|-------------|
-| id | UUID | Yes | Primary key, auto-generated | uuid_v4() | Unique user identifier |
-| email | string | Yes | Unique, max 254 chars, RFC 5322 format | — | Login identifier |
-| display_name | string | Yes | 2-50 chars, alphanumeric + spaces | — | Shown in UI |
-| avatar_url | string | No | Valid URL, max 2048 chars | null | Profile picture URL |
-| role | enum | Yes | "admin" \\| "member" \\| "viewer" | "member" | Access control level |
-| created_at | DateTime | Yes | ISO 8601, UTC | now() | Account creation timestamp |
-
-EXAMPLE 2 — API Endpoint:
-
-BAD (vague, not buildable):
-"POST /api/tasks - Creates a new task with the required fields"
-
-GOOD (specific, buildable):
-\`\`\`
-POST /api/tasks
-Auth: Bearer token (required)
-Content-Type: application/json
-\`\`\`
-
-Request Body:
-\`\`\`typescript
-interface CreateTaskRequest {
-  title: string;        // 1-200 chars, required
-  description?: string; // max 5000 chars, optional, supports markdown
-  priority: "low" | "medium" | "high" | "critical";
-  assignee_id?: string; // UUID, must reference existing user
-  due_date?: string;    // ISO 8601 date, must be in the future
-  labels?: string[];    // max 10 labels, each 1-50 chars
-}
-\`\`\`
-
-Success Response (201 Created):
-\`\`\`typescript
-interface CreateTaskResponse {
-  id: string;           // UUID
-  title: string;
-  status: "todo";       // Always starts as "todo"
-  created_by: string;   // UUID of authenticated user
-  created_at: string;   // ISO 8601
-}
-\`\`\`
-
-Error Responses:
-| Status | Code | Message |
-|--------|------|---------|
-| 400 | INVALID_TITLE | Title must be 1-200 characters |
-| 400 | INVALID_DUE_DATE | Due date must be in the future |
-| 401 | UNAUTHORIZED | Valid bearer token required |
-| 404 | ASSIGNEE_NOT_FOUND | Specified assignee does not exist |
-| 429 | RATE_LIMIT | Max 100 task creations per hour |
-
-EXAMPLE 3 — User Flow:
-
-BAD (vague, not buildable):
-"The user logs in and sees their dashboard with relevant data."
-
-GOOD (specific, buildable):
-**Flow: User Login → Dashboard**
-1. User navigates to /login
-2. System displays email + password form with "Sign In" button (disabled until both fields populated)
-3. User enters email and password, clicks "Sign In"
-4. [IF] Credentials valid → System creates session (JWT, 24h expiry), redirects to /dashboard
-5. [IF] Email not found → Display "No account found with this email" below email field, keep email populated
-6. [IF] Wrong password → Display "Incorrect password" below password field, clear password field, increment failed_attempts
-7. [IF] failed_attempts >= 5 → Lock account for 15 minutes, display "Account locked. Try again in 15 minutes."
-8. Dashboard loads: fetch GET /api/dashboard (auth required), display 3 panels: Recent Tasks (last 10), Team Activity (last 24h), My Assignments (open tasks sorted by due_date ASC)
-
-═══ DOCUMENT STRUCTURE ═══
-
-Generate the FULL specification as a single Markdown document. Follow this exact structure:
+═══ DOCUMENT STRUCTURE (generate ALL sections) ═══
 
 # [App Name] — Engineering Specification
 
 ## 1. Product Overview
-### 1.1 Product Brief
-Generate as a key-value table: Name, One-liner, Vision, Target User, Platform, Complexity, Timeline
-
-### 1.2 Problem Statement
-2-3 paragraphs: What problem exists, who has it, why current solutions fail, what this product does differently
-
-### 1.3 Success Metrics
-Table: Metric | Target | Measurement Method (minimum 5 metrics)
+Brief table (Name, Version: 1.0, One-liner, Vision, Target User, Platform, Timeline), problem statement (2 paragraphs), success metrics table (5+ rows: Metric | Target | Measurement)
 
 ## 2. Users & Personas
-### 2.1 Primary Persona
-Name, role, goals, frustrations, technical level, usage frequency
-
-### 2.2 User Stories
-Format each as: "As a [specific role], I want to [specific action] so that [specific outcome]"
-Minimum ${complexity === "simple" ? "5" : complexity === "moderate" ? "10" : "15"} user stories
+Primary persona (name, role, goals, frustrations), ${minStories}+ user stories ("As a... I want... so that...")
 
 ## 3. Feature Specification
-### 3.1 Feature Matrix
-Table: Feature | Tier (Must/Should/Could) | Priority | Agent Role | Complexity Estimate
-
-### 3.2 Detailed Feature Descriptions
-For EACH feature: Description, Acceptance Criteria (GIVEN/WHEN/THEN), Edge Cases (min 3), Error Handling (table: Condition | Response | User Message)
+Feature matrix table (Feature | Tier | Priority | Complexity), then for the top 3-5 features: GIVEN/WHEN/THEN criteria, 3 edge cases, error table
 
 ## 4. Information Architecture
-### 4.1 Screen Map
-List every screen/page with: route path, purpose, key components, data requirements
-
-### 4.2 Navigation Model
-Primary nav items, secondary nav, mobile nav behavior, breadcrumb logic
+Screen map table (Route | Purpose | Components | Data), navigation model
 
 ## 5. Data Model
-For EACH entity: Full field table (Field | Type | Required | Constraints | Default | Description)
-Entity relationship descriptions with cardinality
-Database indexes with justification
-${complexity === "complex" ? "Migration strategy and seed data requirements" : ""}
+For each entity: field table (Field | Type | Required | Constraints | Default), relationships with cardinality, key indexes
 
 ## 6. API Specification
-For EACH endpoint: Method, Path, Auth, Request Body (TypeScript interface), Response Body (TypeScript interface), Error table (Status | Code | Message)
-${complexity !== "simple" ? "Pagination, filtering, and sorting conventions" : ""}
-Authentication flow and token management
+For each endpoint: METHOD /path, Auth level, TypeScript request/response interfaces, error table (Status | Code | Message)
 
 ## 7. Key User Flows
-Minimum ${complexity === "simple" ? "3" : complexity === "moderate" ? "5" : "8"} critical flows
-Each with numbered steps, decision points [IF/ELSE], error recovery, state mutations
+${minFlows}+ flows with numbered steps, [IF/ELSE] branches, error recovery
 
 ## 8. Technical Architecture
-### 8.1 Tech Stack
-Table: Layer | Technology | Version | Justification
+Tech stack table (Layer | Technology | Version | Justification), system architecture, module/folder structure
 
-### 8.2 System Architecture
-Component diagram in text format showing all services and their connections
-
-### 8.3 Module Structure
-File/folder organization with purpose of each module
-
-${sections.includes(9) ? `## 9. Agentic Architecture
-### 9.1 Agent Inventory — name, purpose, autonomy level, tools available
-### 9.2 Orchestration Pattern — how agents coordinate, who initiates, error escalation
-### 9.3 MCP Design — server configuration, tool schemas, protocol details
-### 9.4 Context Engineering — what context each agent receives, token budget, caching strategy
-### 9.5 Safety Boundaries — what agents CAN'T do, approval gates, rate limits, cost caps
-### 9.6 Agent Cost Model — estimated tokens per operation, monthly cost projections` : ""}
-
-${sections.includes(10) ? `## 10. State Management
-Client state: what lives in React state vs URL params vs localStorage
-Server state: caching strategy, invalidation, optimistic updates
-Real-time state: if applicable, sync mechanism and conflict resolution` : ""}
-
-${sections.includes(11) ? `## 11. Security Architecture
-Authentication: method, token format, session management, refresh strategy
-Authorization: role definitions, permission matrix (table: Role | Resource | Create | Read | Update | Delete)
-Data protection: encryption at rest, in transit, PII handling
-Input validation: rules per field type, sanitization strategy
-Rate limiting: per endpoint limits, burst handling` : ""}
-
-${sections.includes(12) ? `## 12. Non-Functional Requirements
-Table: Category | Requirement | Target | Measurement
-Cover: Performance, Scalability, Availability, Accessibility, Internationalization, Browser Support` : ""}
-
+${sections.includes(9) ? `## 9. Agentic Architecture\nAgent inventory, orchestration, MCP design, safety boundaries, cost model\n` : ""}${sections.includes(10) ? `## 10. State Management\nClient state strategy, server state caching, real-time sync\n` : ""}${sections.includes(11) ? `## 11. Security Architecture\nAuth method, role permissions table, data protection, input validation, rate limits\n` : ""}${sections.includes(12) ? `## 12. Non-Functional Requirements\nTable: Category | Requirement | Target | Measurement (performance, scalability, accessibility, browser support)\n` : ""}
 ## 13. Implementation Roadmap
-Phased plan with clear MVP boundary
-Phase 1 (MVP): specific features, estimated timeline
-Phase 2+: remaining features, dependencies
-Risk register: Risk | Probability | Impact | Mitigation
-Technical debt items to address post-MVP
+Phase 1 (MVP): features + timeline. Phase 2: features + dependencies. Risk register table (Risk | Probability | Impact | Mitigation).
 
-═══ CRITICAL QUALITY CHECKLIST — YOU MUST PASS ALL ═══
-
-Before outputting the spec, verify EVERY item below. Missing any item lowers the score below 95%.
-
-□ VERSION: "Version: 1.0" appears in Section 1 (Product Overview)
-□ SUCCESS METRICS: Section 1.3 has a table with 5+ measurable metrics (Metric | Target | Measurement Method)
-□ ALL SECTIONS PRESENT: Every ## N. heading from the structure above is present
-□ DATA MODEL TYPES: Every field in every data model table has an explicit type (string, number, UUID, boolean, Date, etc.)
-□ API METHODS: Every endpoint starts with a specific HTTP method (GET /path, POST /path, etc.)
-□ TYPESCRIPT INTERFACES: Every API request and response body is defined as a TypeScript interface
-□ ERROR TABLES: Every API endpoint has a table: Status | Code | Message
-□ USER FLOWS: Numbered steps with [IF/ELSE] decision points and error recovery for every major feature
-□ ACCEPTANCE CRITERIA: Every feature has GIVEN/WHEN/THEN format testable criteria
-□ EDGE CASES: At least 3 specific edge cases per feature
-□ IMPLEMENTATION ROADMAP: Section 13 has Phase 1 (MVP), Phase 2+, Risk Register
-□ NO BANNED WORDS: Zero instances of: various, several, multiple, different, etc., handles, manages, processes, supports, appropriate, relevant, necessary, properly, correctly, things, stuff, items, elements, aspects, factors, simple, basic, standard, general, overall, essentially, basically, deal with, take care of
-□ NO PLACEHOLDERS: Zero instances of TODO, TBD, PLACEHOLDER, FIXME, XXX
-□ [ASSUMPTION] TAGS: All inferred details marked with [ASSUMPTION]
-□ CONSISTENT NAMING: Same entity/field names used across ALL sections
-□ TECH VERSIONS: All technology choices include version numbers
-
-This spec will be pasted directly into Claude Code to build the app. ZERO ambiguity tolerance.
-Every entity mentioned in the data model MUST appear in the API spec.
-Every feature in the feature matrix MUST have a user flow.
-Every error condition MUST have a user-facing message.`;
+FINAL RULES:
+- ALL sections above MUST be present — do NOT skip any section
+- Use tables and code blocks, not lengthy prose
+- Include "Version: 1.0" in the first section
+- No banned vague words (various, several, etc., handles, manages, supports, appropriate, properly, things, stuff)
+- Mark inferred details with [ASSUMPTION]
+- Consistent entity names across all sections`;
 }
 
 export function promptRegenerateSection(
