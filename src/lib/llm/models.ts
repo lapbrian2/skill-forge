@@ -53,7 +53,7 @@ export const MODEL_CONFIG: Record<TaskType, ModelConfig> = {
   },
   generate: {
     model: "claude-sonnet-4-6",
-    maxTokens: 16384,
+    maxTokens: 32768,
     temperature: 0.5,
   },
   validate: {
