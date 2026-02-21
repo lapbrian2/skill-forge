@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  CheckCircle, Sparkles, AlertCircle,
+  CheckCircle, Sparkles, AlertCircle, RefreshCw,
 } from "lucide-react";
 import { getProject, saveProject } from "@/lib/storage";
 import { PHASES } from "@/lib/constants";
@@ -598,12 +598,30 @@ export default function ProjectPage() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
+            className="space-y-3"
           >
             <ValidationPanel
               validation={project.validation}
               onFixSection={handleRegenerateSection}
               isFixing={regeneratingSection !== null}
             />
+            {/* Regenerate full spec button */}
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  specSavedRef.current = false;
+                  autoGenTriggeredRef.current = false;
+                  generateSpec(project);
+                }}
+                disabled={stream.isStreaming}
+                className="border-orange-500/20 text-orange-400 hover:bg-orange-500/10 h-8 text-[12px] gap-1.5"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Regenerate Full Spec
+              </Button>
+            </div>
           </motion.div>
         )}
 
