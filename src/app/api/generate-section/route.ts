@@ -20,6 +20,7 @@ export async function POST(req: Request) {
       project_data,
       current_spec,
       complexity,
+      builder_profile,
     } = body;
 
     if (!section_number || !project_data || !current_spec) {
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
         JSON.stringify(project_data, null, 2),
         current_spec,
         complexity || "moderate",
+        builder_profile || "dev_team",
       ),
     });
 

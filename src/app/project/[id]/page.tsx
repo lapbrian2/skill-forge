@@ -20,6 +20,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { useLLMStream } from "@/hooks/use-llm-stream";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { replaceSection, parseSpecSections } from "@/lib/spec/section-parser";
+import { BUILDER_PROFILE_LABELS, isAIBuilder } from "@/lib/types";
 import type { Project, Phase, QAEntry, ChatMessage } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -182,6 +183,7 @@ export default function ProjectPage() {
           complexity: proj.complexity,
           is_agentic: proj.is_agentic,
           understanding: s.understanding,
+          builder_profile: proj.builder_profile || "dev_team",
         }),
       });
 
@@ -241,6 +243,7 @@ export default function ProjectPage() {
         discovery: proj.discovery,
       },
       complexity: proj.complexity,
+      builder_profile: proj.builder_profile || "dev_team",
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -365,6 +368,7 @@ export default function ProjectPage() {
         },
         current_spec: specMarkdown,
         complexity: proj.complexity,
+        builder_profile: proj.builder_profile || "dev_team",
       });
     } catch {
       toast.error("Failed to regenerate section");
@@ -441,6 +445,7 @@ export default function ProjectPage() {
           },
           complexity: proj.complexity,
           part1_content: part1Content,
+          builder_profile: proj.builder_profile || "dev_team",
         });
         return;
       }
@@ -467,7 +472,10 @@ export default function ProjectPage() {
       fetch("/api/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ spec_content: content }),
+        body: JSON.stringify({
+          spec_content: content,
+          builder_profile: project.builder_profile || "dev_team",
+        }),
       })
         .then(r => r.ok ? r.json() : null)
         .then(valData => {
@@ -525,13 +533,22 @@ export default function ProjectPage() {
             <p className="text-[13px] text-white/35">{project.one_liner}</p>
           )}
         </div>
-        <Badge variant="outline" className={`text-[11px] ${
-          project.complexity === "simple" ? "text-emerald-400 border-emerald-400/20"
-          : project.complexity === "complex" ? "text-red-400 border-red-400/20"
-          : "text-amber-400 border-amber-400/20"
-        }`}>
-          {project.complexity}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className={`text-[11px] ${
+            project.complexity === "simple" ? "text-emerald-400 border-emerald-400/20"
+            : project.complexity === "complex" ? "text-red-400 border-red-400/20"
+            : "text-amber-400 border-amber-400/20"
+          }`}>
+            {project.complexity}
+          </Badge>
+          <Badge variant="outline" className={`text-[11px] ${
+            isAIBuilder(project.builder_profile || "dev_team")
+              ? "text-cyan-400 border-cyan-400/20"
+              : "text-white/40 border-white/10"
+          }`}>
+            {BUILDER_PROFILE_LABELS[project.builder_profile || "dev_team"]}
+          </Badge>
+        </div>
       </div>
 
       {/* Phase Stepper */}

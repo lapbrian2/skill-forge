@@ -8,10 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, Wand2 } from "lucide-react";
 import { quickClassify } from "@/lib/engine/complexity";
-import { createProject } from "@/lib/types";
+import { createProject, BUILDER_PROFILE_LABELS } from "@/lib/types";
 import { saveProject } from "@/lib/storage";
 import { toast } from "sonner";
-import type { Complexity } from "@/lib/types";
+import type { Complexity, BuilderProfile } from "@/lib/types";
 
 const STARTERS = [
   { label: "Project Management Tool", desc: "A project management tool for freelancers with time tracking, client invoicing, and milestone tracking" },
@@ -28,9 +28,19 @@ const CX_META = {
   complex: { color: "text-red-400", bg: "bg-red-500/10 border-red-500/20", desc: "15-20 questions, 12-25 page spec" },
 };
 
+const BUILDER_PROFILES: { id: BuilderProfile; label: string; desc: string; icon: string }[] = [
+  { id: "lovable", label: "Lovable", desc: "AI app builder", icon: "heart" },
+  { id: "bolt", label: "Bolt", desc: "AI full-stack builder", icon: "zap" },
+  { id: "claude_code", label: "Claude Code", desc: "AI coding agent", icon: "terminal" },
+  { id: "cursor", label: "Cursor", desc: "AI code editor", icon: "mouse-pointer" },
+  { id: "replit_agent", label: "Replit Agent", desc: "AI dev environment", icon: "play" },
+  { id: "dev_team", label: "Dev Team", desc: "Traditional engineers", icon: "users" },
+];
+
 export default function CreatePage() {
   const router = useRouter();
   const [description, setDescription] = useState("");
+  const [builderProfile, setBuilderProfile] = useState<BuilderProfile>("claude_code");
   const [isCreating, setIsCreating] = useState(false);
   const [classification, setClassification] = useState<{
     complexity: Complexity;
@@ -79,7 +89,7 @@ export default function CreatePage() {
         // LLM unavailable — use client-side classification
       }
 
-      const project = createProject(description.trim(), complexity);
+      const project = createProject(description.trim(), complexity, builderProfile);
       project.is_agentic = isAgentic;
       project.name = name;
       project.one_liner = oneLiner;
@@ -94,6 +104,7 @@ export default function CreatePage() {
   };
 
   const cx = classification ? CX_META[classification.complexity] : null;
+  const isAITool = builderProfile !== "dev_team";
 
   return (
     <div className="space-y-6">
@@ -110,12 +121,47 @@ export default function CreatePage() {
           </p>
         </div>
 
+        {/* Builder Profile Selector */}
+        <div className="max-w-2xl mx-auto space-y-2">
+          <span className="text-[11px] text-white/20 uppercase tracking-wider font-medium">
+            What are you building with?
+          </span>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+            {BUILDER_PROFILES.map(bp => (
+              <button
+                key={bp.id}
+                onClick={() => setBuilderProfile(bp.id)}
+                className={`text-center rounded-xl border transition-all p-2.5 ${
+                  builderProfile === bp.id
+                    ? "border-orange-500/50 bg-orange-500/10 ring-1 ring-orange-500/20"
+                    : "border-white/5 bg-white/[0.015] hover:bg-white/[0.04] hover:border-white/10"
+                }`}
+              >
+                <span className={`text-[12px] font-medium block ${
+                  builderProfile === bp.id ? "text-orange-400" : "text-white/60"
+                }`}>
+                  {bp.label}
+                </span>
+                <span className="text-[9px] text-white/20 block mt-0.5">{bp.desc}</span>
+              </button>
+            ))}
+          </div>
+          {isAITool && (
+            <p className="text-[11px] text-orange-400/50">
+              Spec optimized for {BUILDER_PROFILE_LABELS[builderProfile]} — shorter, UI-focused, direct instructions
+            </p>
+          )}
+        </div>
+
         {/* Input */}
         <div className="rounded-2xl border border-white/8 bg-[#111] p-6 space-y-4 max-w-2xl mx-auto">
           <Textarea
             value={description}
             onChange={e => handleDescriptionChange(e.target.value)}
-            placeholder="e.g. A project management tool for freelancers with time tracking and invoicing"
+            placeholder={isAITool
+              ? "e.g. A habit tracker with daily streaks, charts, and reminders"
+              : "e.g. A project management tool for freelancers with time tracking and invoicing"
+            }
             className="bg-[#0A0A0A] border-white/8 text-[15px] min-h-[130px] resize-none placeholder:text-white/15 leading-relaxed rounded-xl"
             autoFocus
             onKeyDown={e => {

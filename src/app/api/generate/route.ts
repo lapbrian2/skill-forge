@@ -18,7 +18,7 @@ export const maxDuration = 300;
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { project_data, complexity } = body;
+    const { project_data, complexity, builder_profile } = body;
 
     if (!project_data) {
       return new Response(JSON.stringify({ error: "project_data required" }), {
@@ -29,6 +29,7 @@ export async function POST(req: Request) {
 
     const cx = (complexity || "moderate") as Complexity;
     const sections = COMPLEXITY_CONFIG[cx].sections as unknown as number[];
+    const profile = builder_profile || "dev_team";
 
     // Extract terminology from user's discovery answers (SPEC-04)
     const description = project_data.description || project_data.one_liner || "";
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
         cx,
         sections,
         terminology,
+        profile,
       ),
     });
 

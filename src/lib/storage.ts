@@ -7,6 +7,18 @@ import type { Project } from "./types";
 
 const PROJECTS_KEY = "skillforge_projects";
 
+// ── Migration ─────────────────────────────────────────────────
+// Add defaults for fields added after initial release.
+
+function migrateProject(p: Project): Project {
+  // builder_profile added in v2.1 — default to dev_team for existing projects
+  if (!p.builder_profile) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (p as any).builder_profile = "dev_team";
+  }
+  return p;
+}
+
 // ── Read ───────────────────────────────────────────────────────
 
 export function listProjects(): Project[] {
@@ -15,9 +27,11 @@ export function listProjects(): Project[] {
     const raw = localStorage.getItem(PROJECTS_KEY);
     if (!raw) return [];
     const projects: Project[] = JSON.parse(raw);
-    return projects.sort((a, b) =>
-      new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    );
+    return projects
+      .map(migrateProject)
+      .sort((a, b) =>
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      );
   } catch {
     return [];
   }

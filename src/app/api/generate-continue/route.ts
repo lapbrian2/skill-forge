@@ -18,7 +18,7 @@ export const maxDuration = 300;
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { project_data, complexity, part1_content } = body;
+    const { project_data, complexity, part1_content, builder_profile } = body;
 
     if (!project_data || !part1_content) {
       return new Response(
@@ -29,6 +29,7 @@ export async function POST(req: Request) {
 
     const cx = (complexity || "moderate") as Complexity;
     const sections = COMPLEXITY_CONFIG[cx].sections as unknown as number[];
+    const profile = builder_profile || "dev_team";
 
     // Extract terminology from user's discovery answers
     const description = project_data.description || project_data.one_liner || "";
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
         sections,
         part1_content,
         terminology,
+        profile,
       ),
     });
 

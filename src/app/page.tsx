@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { listProjects, deleteProject } from "@/lib/storage";
 import { PHASES } from "@/lib/constants";
+import { BUILDER_PROFILE_LABELS, isAIBuilder } from "@/lib/types";
 import type { Project } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -117,6 +118,11 @@ export default function DashboardPage() {
                       {project.is_agentic && (
                         <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-400/20">
                           agentic
+                        </Badge>
+                      )}
+                      {isAIBuilder(project.builder_profile || "dev_team") && (
+                        <Badge variant="outline" className="text-[10px] text-cyan-400 border-cyan-400/20">
+                          {BUILDER_PROFILE_LABELS[project.builder_profile || "dev_team"]}
                         </Badge>
                       )}
                     </div>

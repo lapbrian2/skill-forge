@@ -75,12 +75,13 @@ function checkAssumptions(markdown: string): number {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { spec_content, required_sections } = body;
+    const { spec_content, required_sections, builder_profile } = body;
 
     if (!spec_content) {
       return NextResponse.json({ error: "spec_content required" }, { status: 400 });
     }
 
+    const isAITool = builder_profile && builder_profile !== "dev_team";
     const sections = required_sections || [1, 2, 3, 4, 5, 6, 7, 8, 9, 14];
     const remediations: Remediation[] = [];
     const wordCount = spec_content.split(/\s+/).length;
@@ -134,9 +135,9 @@ export async function POST(req: Request) {
       });
     }
 
-    // 4.3: Word count — graduated by check
-    const minWords = 500;
-    const goodWords = 2000;
+    // 4.3: Word count — graduated by check (relaxed for AI tool specs)
+    const minWords = isAITool ? 300 : 500;
+    const goodWords = isAITool ? 1200 : 2000;
     t4Checks.push({
       id: "depth_minimum",
       description: `Spec meets minimum depth (>${minWords} words)`,
@@ -332,12 +333,12 @@ export async function POST(req: Request) {
       details: sectionNumbers.length < 5 ? `Only ${sectionNumbers.length} numbered sections found.` : undefined,
     });
 
-    // 5.8: Has risk assessment
+    // 5.8: Has risk assessment (not required for AI tool specs)
     const hasRisks = /risk\s+(register|assessment|analysis)|probability|impact|mitigation/i.test(spec_content);
     t5Checks.push({
       id: "has_risks",
       description: "Risk assessment included",
-      passed: hasRisks,
+      passed: isAITool || hasRisks, // Skip for AI tool specs
     });
 
     // 5.9: Has security considerations

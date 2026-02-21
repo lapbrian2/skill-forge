@@ -11,6 +11,17 @@ export type Grade = "A" | "B" | "C" | "D" | "F";
 export type FeatureTier = "must_have" | "should_have" | "could_have";
 export type AgentRole = "none" | "assist" | "own";
 
+// Builder Profile — controls output density, section depth, and language style.
+// AI coding tools get shorter, flatter, more directive specs.
+// Dev teams get full enterprise-grade specs.
+export type BuilderProfile =
+  | "lovable"
+  | "bolt"
+  | "claude_code"
+  | "cursor"
+  | "replit_agent"
+  | "dev_team";
+
 export interface Project {
   id: string;
   name: string;
@@ -19,6 +30,7 @@ export interface Project {
   complexity: Complexity;
   current_phase: Phase;
   is_agentic: boolean;
+  builder_profile: BuilderProfile;
   created_at: string; // ISO 8601
   updated_at: string;
   discovery: DiscoveryData;
@@ -208,7 +220,11 @@ export interface LLMResponse<T> {
 
 // ── Factory Functions ──────────────────────────────────────────
 
-export function createProject(description: string, complexity: Complexity = "moderate"): Project {
+export function createProject(
+  description: string,
+  complexity: Complexity = "moderate",
+  builderProfile: BuilderProfile = "dev_team",
+): Project {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   return {
@@ -219,6 +235,7 @@ export function createProject(description: string, complexity: Complexity = "mod
     complexity,
     current_phase: "discover",
     is_agentic: false,
+    builder_profile: builderProfile,
     created_at: now,
     updated_at: now,
     discovery: createDiscoveryData(),
@@ -260,6 +277,21 @@ export function createDiscoveryData(): DiscoveryData {
     tollgate_3_passed: false,
   };
 }
+
+/** Returns true if the builder profile is an AI coding tool (not a dev team) */
+export function isAIBuilder(profile: BuilderProfile): boolean {
+  return profile !== "dev_team";
+}
+
+/** Human-readable label for a builder profile */
+export const BUILDER_PROFILE_LABELS: Record<BuilderProfile, string> = {
+  lovable: "Lovable",
+  bolt: "Bolt",
+  claude_code: "Claude Code",
+  cursor: "Cursor",
+  replit_agent: "Replit Agent",
+  dev_team: "Dev Team",
+};
 
 export function createFeature(): Feature {
   return {

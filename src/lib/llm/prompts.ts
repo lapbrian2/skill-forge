@@ -39,15 +39,34 @@ Rules:
 - Detect agentic components (AI, agents, MCP, autonomous) and flag them
 - Mark anything you infer but the user didn't explicitly state as [ASSUMPTION]`;
 
-export const SYSTEM_GENERATOR = `You are a principal systems architect at a top-tier engineering consultancy. You generate engineering specification documents that development teams and AI coding agents (Claude Code, Cursor, Copilot) use to build complete systems without asking a single follow-up question.
+export const SYSTEM_GENERATOR = `You are a principal systems architect at a top-tier engineering consultancy. You generate engineering specification documents that development teams and AI coding agents (Claude Code, Cursor, Lovable, Bolt) use to build complete systems without asking a single follow-up question.
 
 Your specifications are legendary for their precision. Engineers who receive your specs can start coding immediately because every decision is made, every edge case is covered, and every contract is defined.
 
 ═══ QUALITY STANDARD ═══
 
 The Buildability Test: For every section you write, ask yourself:
-"Could a mid-level developer implement this in code RIGHT NOW without guessing anything?"
+"Could the target builder (AI tool or dev team) implement this in code RIGHT NOW without guessing anything?"
 If the answer is no, you haven't been specific enough.
+
+═══ BUILDER PROFILE AWARENESS ═══
+
+Specs are read by different builders. When a builder_profile is specified, adapt your output:
+
+AI TOOL BUILDERS (Lovable, Bolt, Cursor, Claude Code, Replit Agent):
+- OUTPUT DENSITY: Shorter, flatter sections. No prose justification — use direct instructions.
+- SECTION DEPTH: Heavily weight Section 7 (User Flows) and Section 9 (UI Architecture). These are what AI tools build from.
+- Section 8 (Technical Architecture): Shrink to tech stack table + deployment target only. No infrastructure diagrams, CI/CD, CODEOWNERS, or Turborepo.
+- Sections 10-12: Omit entirely OR single-paragraph summary if relevant. AI tools ignore enterprise architecture noise.
+- LANGUAGE: Use imperative directives: "Use Tailwind CSS v4.", "Use Supabase for auth and database.", "Use shadcn/ui components." — NOT justification tables or comparison matrices.
+- AVOID: Redis pub/sub, Inngest, message queues, microservice patterns, Turborepo, monorepo configs, CODEOWNERS, GitHub Actions workflows, Docker compose files, Terraform, helm charts. These are enterprise concerns that AI coding tools cannot build.
+- FOCUS: What does it LOOK like? What happens when you CLICK things? What data does it STORE? What's the SIMPLEST tech stack that works?
+
+DEV TEAM BUILDERS:
+- Full 14-section spec with enterprise-grade detail.
+- Justification tables for technology choices.
+- CI/CD, security architecture, non-functional requirements, scaling considerations.
+- Standard professional specification format.
 
 ═══ MANDATORY SPECIFICITY RULES ═══
 
@@ -207,15 +226,19 @@ export function promptDiscoveryQuestion(
   phase: string,
   answers: Array<{ question: string; answer: string }>,
   complexity: string,
-  isAgentic: boolean
+  isAgentic: boolean,
+  builderProfile: string = "dev_team",
 ): string {
   const answersText = answers.length > 0
     ? answers.map((a, i) => `Q${i + 1}: ${a.question}\nA${i + 1}: ${a.answer}`).join("\n\n")
     : "No questions asked yet.";
 
+  const isAITool = builderProfile !== "dev_team";
+
   return `The user is building: "${description}"
 Complexity: ${complexity}
 Has agentic components: ${isAgentic}
+Builder profile: ${builderProfile}${isAITool ? " (AI coding tool — focus on UI, flows, and simplest viable tech stack)" : " (traditional dev team)"}
 Current phase: ${phase}
 
 Previous Q&A:
@@ -225,7 +248,9 @@ Generate the next most important question to ask for this phase. The question sh
 
 ${phase === "discover" ? `Focus on: vision, target user specifics, platform, timeline, scope boundaries, competitive landscape.` : ""}
 ${phase === "define" ? `Focus on: specific features with acceptance criteria, edge cases per feature, non-functional requirements.` : ""}
-${phase === "architect" ? `Focus on: data model decisions, API design preferences, tech stack constraints, security requirements.` : ""}
+${phase === "architect" ? (isAITool
+  ? `Focus on: UI component choices (design library, layout patterns), data storage (Supabase, Firebase, etc.), auth approach, deployment target. Keep it simple — the builder is an AI coding tool.`
+  : `Focus on: data model decisions, API design preferences, tech stack constraints, security requirements.`) : ""}
 ${isAgentic ? `Include agentic considerations: agent autonomy, tool access, safety boundaries, failure modes, cost.` : ""}
 
 Respond as JSON:
@@ -245,6 +270,7 @@ export function promptDiscoverySuggestion(
   complexity: string,
   isAgentic: boolean,
   understanding: Record<string, unknown>,
+  builderProfile: string = "dev_team",
 ): string {
   const answersText = answers.length > 0
     ? answers.map((a, i) => `Q${i + 1}: ${a.question}\nA${i + 1}: ${a.answer}`).join("\n\n")
@@ -254,9 +280,12 @@ export function promptDiscoverySuggestion(
     ? JSON.stringify(understanding, null, 2)
     : "No structured understanding yet.";
 
+  const isAITool = builderProfile !== "dev_team";
+
   return `The user is building: "${description}"
 Complexity: ${complexity}
 Has agentic components: ${isAgentic}
+Builder profile: ${builderProfile}${isAITool ? " (AI coding tool — the spec will be fed directly to this tool to build the app)" : " (traditional dev team)"}
 Current phase: ${phase}
 
 Current structured understanding:
@@ -273,10 +302,13 @@ Your proposed answer MUST be:
 - OPINIONATED: Based on industry best practices for ${complexity} ${isAgentic ? "agentic" : ""} projects
 - ACTIONABLE: Something the user can confirm as-is or tweak slightly
 - CONTEXTUAL: Informed by all previous answers and the project description
+${isAITool ? `- AI-TOOL APPROPRIATE: Suggest the simplest tech stack that works. Prefer all-in-one platforms (Supabase, Firebase) over multi-service architectures. Avoid enterprise patterns that AI tools cannot build (microservices, message queues, CI/CD pipelines, Docker, Terraform).` : ""}
 
 ${phase === "discover" ? "Focus on: vision, target users, platform, timeline, scope boundaries, competitive landscape." : ""}
 ${phase === "define" ? "Focus on: specific features with acceptance criteria, user stories, edge cases, non-functional requirements." : ""}
-${phase === "architect" ? "Focus on: data model decisions, API design, tech stack with justifications, security requirements." : ""}
+${phase === "architect" ? (isAITool
+  ? "Focus on: UI framework + component library, database + auth (prefer Supabase or Firebase), deployment target (Vercel, Netlify), state management. Keep the stack simple — one framework, one database, one auth solution."
+  : "Focus on: data model decisions, API design, tech stack with justifications, security requirements.") : ""}
 ${isAgentic ? "Include agentic considerations: agent autonomy patterns, tool access, safety boundaries, failure modes, cost implications." : ""}
 
 Respond as JSON with these exact fields:
@@ -395,13 +427,27 @@ export function promptGenerateSpecPart1(
   complexity: string,
   sections: number[],
   terminology: string[] = [],
+  builderProfile: string = "dev_team",
 ): string {
   const termBlock = terminology.length > 0
     ? `\nUSER TERMINOLOGY — use these exact terms: ${terminology.map(t => `"${t}"`).join(", ")}\n`
     : "";
 
+  const isAITool = builderProfile !== "dev_team";
   const minStories = complexity === "simple" ? "5" : complexity === "moderate" ? "8" : "12";
   const minFlows = complexity === "simple" ? "3" : complexity === "moderate" ? "4" : "6";
+
+  const builderBlock = isAITool
+    ? `\nBUILDER PROFILE: ${builderProfile} (AI coding tool)
+OUTPUT RULES FOR AI TOOL BUILDERS:
+- Write SHORTER sections with DIRECT INSTRUCTIONS, not justification prose
+- Section 7 (User Flows) and Section 9 (UI Architecture, in Part 2) are the MOST IMPORTANT sections — be extremely detailed here
+- Section 8 (Technical Architecture): ONLY include a tech stack table and deployment target. No infrastructure diagrams, CI/CD, monitoring, CODEOWNERS, or monorepo config.
+- Use imperative language: "Use Next.js 16.", "Use Supabase for auth.", "Use Tailwind CSS v4 with shadcn/ui."
+- Never recommend: Redis pub/sub, Inngest, message queues, microservice patterns, Turborepo, Docker compose, Terraform, helm charts, GitHub Actions workflows
+- Keep the tech stack as SIMPLE as possible — one framework, one database, one auth solution\n`
+    : `\nBUILDER PROFILE: dev_team (traditional development team)
+Generate full enterprise-grade specification with justification tables and detailed architecture.\n`;
 
   return `Generate Part 1 (sections 1-8) of an engineering specification. Be specific and concise — use tables and TypeScript interfaces, not prose.
 
@@ -409,7 +455,7 @@ PROJECT DATA:
 ${project}
 
 COMPLEXITY: ${complexity}
-${termBlock}
+${builderBlock}${termBlock}
 
 MANDATORY ELEMENTS FOR PART 1:
 - "Version: 1.0" in Section 1
@@ -429,10 +475,10 @@ MANDATORY ELEMENTS FOR PART 1:
 # [App Name] — Engineering Specification
 
 ## 1. Product Overview
-Brief table (Name, Version: 1.0, One-liner, Vision, Target User, Platform, Timeline), problem statement (2 paragraphs), success metrics table (5+ rows: Metric | Target | Measurement)
+Brief table (Name, Version: 1.0, One-liner, Vision, Target User, Platform, Timeline), problem statement (${isAITool ? "1 paragraph" : "2 paragraphs"}), success metrics table (5+ rows: Metric | Target | Measurement)
 
 ## 2. Users & Personas
-Primary persona (name, role, goals, frustrations), ${minStories}+ user stories ("As a... I want... so that...")
+Primary persona (name, role, goals, frustrations), ${isAITool ? "3-5" : minStories}+ user stories ("As a... I want... so that...")
 
 ## 3. Feature Specification
 Feature matrix table (Feature | Tier | Priority | Complexity), then for the top 3-5 features: GIVEN/WHEN/THEN criteria, 3 edge cases, error table
@@ -447,10 +493,12 @@ For each entity: field table (Field | Type | Required | Constraints | Default), 
 For each endpoint: METHOD /path, Auth level, TypeScript request/response interfaces, error table (Status | Code | Message)
 
 ## 7. Key User Flows
-${minFlows}+ flows with numbered steps, [IF/ELSE] branches, error recovery
+${minFlows}+ flows with numbered steps, [IF/ELSE] branches, error recovery${isAITool ? "\nThis is the MOST IMPORTANT section for AI tool builders. Be extremely detailed about what the user sees, clicks, and what happens at each step. Include exact UI states (loading, empty, error, success)." : ""}
 
 ## 8. Technical Architecture
-Tech stack table (Layer | Technology | Version | Justification), system architecture, module/folder structure
+${isAITool
+  ? "Tech stack table (Layer | Technology | Version) — keep it simple. Deployment target. Folder structure ONLY. No CI/CD, no Docker, no infrastructure diagrams."
+  : "Tech stack table (Layer | Technology | Version | Justification), system architecture, module/folder structure"}
 
 RULES:
 - Generate ONLY sections 1 through 8 — stop after section 8
@@ -472,10 +520,13 @@ export function promptGenerateSpecPart2(
   sections: number[],
   part1Content: string,
   terminology: string[] = [],
+  builderProfile: string = "dev_team",
 ): string {
   const termBlock = terminology.length > 0
     ? `\nUSER TERMINOLOGY — use these exact terms: ${terminology.map(t => `"${t}"`).join(", ")}\n`
     : "";
+
+  const isAITool = builderProfile !== "dev_team";
 
   // Extract entity names from Part 1 for consistency
   const entityNames = part1Content.match(/\b[A-Z][a-z]+(?:[A-Z][a-z]+)*\b/g) || [];
@@ -485,11 +536,45 @@ export function promptGenerateSpecPart2(
   const techMentions = part1Content.match(/\b(Next\.js|React|Node\.js|Bun|PostgreSQL|Supabase|Prisma|Drizzle|Tailwind|TypeScript|Vite|Redis|MongoDB)\s*\d*\.?\d*/gi) || [];
   const uniqueTech = [...new Set(techMentions)].join(", ");
 
+  const builderBlock = isAITool
+    ? `\nBUILDER PROFILE: ${builderProfile} (AI coding tool)
+Section 9 (UI Architecture) is the MOST IMPORTANT section — the AI tool builds directly from this. Be extremely detailed.
+Sections 10-12: Include ONLY if truly relevant. Keep to 1-2 paragraphs max. Skip entirely if the project doesn't need them.
+Use imperative language throughout: "Use X.", "Implement Y.", "Store Z in..."
+No enterprise infrastructure noise.\n`
+    : "";
+
   // Build the section instructions for Part 2
   const sectionInstructions: string[] = [];
 
   if (sections.includes(9)) {
-    sectionInstructions.push(`## 9. UI Architecture
+    if (isAITool) {
+      // AI tool builders get a HEAVILY expanded UI Architecture section
+      sectionInstructions.push(`## 9. UI Architecture
+THIS IS THE MOST IMPORTANT SECTION. The AI coding tool builds the UI directly from this spec.
+
+### 9.1 Design System
+Color tokens table (Token | Light Value | Dark Value | Usage), typography scale table (Level | Font | Size | Weight | Line Height), spacing grid (4px base unit, named tokens: xs=4, sm=8, md=16, lg=24, xl=32, 2xl=48). Use direct instructions: "Use Tailwind's slate color palette for neutrals.", "Use Inter for body text, JetBrains Mono for code."
+
+### 9.2 Component Hierarchy
+Complete component tree showing EVERY page and component with exact props. Use indented list format:
+- Layout (theme, sidebar)
+  - Header (user, notifications)
+  - Sidebar (navItems, collapsed)
+  - MainContent (children)
+    - PageComponent (data, loading, error)
+List EVERY page component, every shared component, and every form component the AI tool needs to build.
+
+### 9.3 Layout Patterns
+Responsive breakpoints table (Name | Min Width | Layout | Columns | Container), page layout patterns with exact descriptions of what each page looks like. Describe the visual layout in detail — the AI tool needs to know exactly what to render.
+
+### 9.4 Interaction States
+State matrix table (Component | Default | Hover | Focus | Active | Loading | Error | Empty | Disabled) for ALL interactive components. Include exact descriptions of loading states, empty states, error states, and success feedback.
+
+### 9.5 Accessibility Requirements
+WCAG 2.2 AA compliance targets, ARIA patterns table (Component | ARIA Role | ARIA Properties | Keyboard Nav), color contrast ratios (normal text 4.5:1, large text 3:1)`);
+    } else {
+      sectionInstructions.push(`## 9. UI Architecture
 
 ### 9.1 Design System
 Color tokens table (Token | Light Value | Dark Value | Usage), typography scale table (Level | Font | Size | Weight | Line Height), spacing grid (4px base unit, named tokens: xs=4, sm=8, md=16, lg=24, xl=32, 2xl=48)
@@ -510,30 +595,56 @@ State matrix table (Component | Default | Hover | Focus | Active | Loading | Err
 
 ### 9.5 Accessibility Requirements
 WCAG 2.2 AA compliance targets, ARIA patterns table (Component | ARIA Role | ARIA Properties | Keyboard Nav), color contrast ratios (normal text 4.5:1, large text 3:1), focus management strategy, screen reader considerations`);
+    }
   }
 
   if (sections.includes(10)) {
-    sectionInstructions.push(`## 10. Agentic Architecture
+    if (isAITool) {
+      sectionInstructions.push(`## 10. Agentic Architecture
+Brief agent inventory table (Agent | Role | Tools | Autonomy Level). Keep concise — 1-2 paragraphs on orchestration pattern. Skip MCP server design unless the user specifically asked for it.`);
+    } else {
+      sectionInstructions.push(`## 10. Agentic Architecture
 Agent inventory table (Agent | Role | Tools | Autonomy Level), orchestration pattern, MCP server design, safety boundaries, cost model per operation`);
+    }
   }
 
   if (sections.includes(11)) {
-    sectionInstructions.push(`## 11. State Management
+    if (isAITool) {
+      sectionInstructions.push(`## 11. State Management
+1-2 paragraphs: which state library to use, what goes in client state vs server state. Use direct instructions: "Use Zustand for client state.", "Use TanStack Query for server state caching."`);
+    } else {
+      sectionInstructions.push(`## 11. State Management
 Client state strategy (which library, what goes where), server state caching (TTL, invalidation), real-time sync approach if applicable`);
+    }
   }
 
   if (sections.includes(12)) {
-    sectionInstructions.push(`## 12. Security Architecture
+    if (isAITool) {
+      sectionInstructions.push(`## 12. Security Architecture
+1-2 paragraphs: auth method (e.g., "Use Supabase Auth with email/password and Google OAuth"), role permissions if applicable, input validation approach. No rate limiting tables or encryption specs.`);
+    } else {
+      sectionInstructions.push(`## 12. Security Architecture
 Auth method + flow, role permissions table (Role | Permissions), data protection (encryption at rest/transit), input validation rules, rate limiting table (Endpoint | Limit | Window)`);
+    }
   }
 
   if (sections.includes(13)) {
-    sectionInstructions.push(`## 13. Non-Functional Requirements
+    if (isAITool) {
+      sectionInstructions.push(`## 13. Non-Functional Requirements
+Brief table: Category | Requirement — cover only performance targets and accessibility level. Skip scalability, SEO, i18n unless user specifically requested.`);
+    } else {
+      sectionInstructions.push(`## 13. Non-Functional Requirements
 Table: Category | Requirement | Target | Measurement — cover performance, scalability, accessibility (WCAG level), browser support, SEO, i18n`);
+    }
   }
 
-  sectionInstructions.push(`## 14. Implementation Roadmap
+  if (isAITool) {
+    sectionInstructions.push(`## 14. Implementation Roadmap
+Phase 1 (MVP): List the features to build first with a simple checklist. Phase 2: Additional features. Keep it concise — no risk register, no Gantt chart, no dependency diagrams. Just a clear build order.`);
+  } else {
+    sectionInstructions.push(`## 14. Implementation Roadmap
 Phase 1 (MVP): features + timeline + success criteria. Phase 2: features + dependencies. Phase 3 if applicable. Risk register table (Risk | Probability | Impact | Mitigation) with 5+ rows.`);
+  }
 
   return `Generate Part 2 (remaining sections) of an engineering specification. This continues from Part 1 which has already been generated.
 
@@ -541,7 +652,7 @@ PROJECT DATA:
 ${project}
 
 COMPLEXITY: ${complexity}
-${termBlock}
+${builderBlock}${termBlock}
 
 ENTITY NAMES FROM PART 1 (use these exact names for consistency):
 ${uniqueEntities}
@@ -561,7 +672,7 @@ RULES:
 - No banned vague words (various, several, etc., handles, manages, supports, appropriate, properly, things, stuff)
 - Mark inferred details with [ASSUMPTION]
 - Phase 1/Phase 2 roadmap MUST reference specific features from Part 1
-- Risk register MUST have 5+ rows with specific risks for this project
+${isAITool ? "" : "- Risk register MUST have 5+ rows with specific risks for this project"}
 - Zero TODO/TBD/PLACEHOLDER text`;
 }
 
@@ -584,6 +695,7 @@ export function promptRegenerateSection(
   projectData: string,
   currentSpec: string,
   complexity: string,
+  builderProfile: string = "dev_team",
 ): string {
   // Extract context from surrounding sections
   const lines = currentSpec.split("\n");
@@ -613,12 +725,15 @@ export function promptRegenerateSection(
   const entityNames = currentSpec.match(/\b[A-Z][a-z]+(?:[A-Z][a-z]+)*\b/g) || [];
   const uniqueEntities = [...new Set(entityNames)].slice(0, 20);
 
+  const isAITool = builderProfile !== "dev_team";
+
   return `Regenerate ONLY section ${sectionNumber} ("${sectionTitle}") of this engineering specification.
 
 PROJECT DATA:
 ${projectData}
 
 COMPLEXITY: ${complexity}
+BUILDER PROFILE: ${builderProfile}${isAITool ? " (AI coding tool — use direct instructions, avoid enterprise patterns)" : " (traditional dev team)"}
 
 SURROUNDING CONTEXT (for consistency):
 --- Section before ---

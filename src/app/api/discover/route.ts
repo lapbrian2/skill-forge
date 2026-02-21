@@ -56,12 +56,12 @@ export async function POST(req: Request) {
       }
 
       case "question": {
-        const { description, phase, answers, complexity, is_agentic } = body;
+        const { description, phase, answers, complexity, is_agentic, builder_profile } = body;
 
         const { data, usage } = await llmParse({
           task: "question",
           system: SYSTEM_DISCOVERY,
-          prompt: promptDiscoveryQuestion(description, phase, answers || [], complexity, is_agentic),
+          prompt: promptDiscoveryQuestion(description, phase, answers || [], complexity, is_agentic, builder_profile || "dev_team"),
           schema: DiscoveryQuestionSchema,
         });
 
@@ -144,7 +144,7 @@ export async function POST(req: Request) {
       }
 
       case "suggest": {
-        const { description, phase, answers, complexity, is_agentic, understanding } = body;
+        const { description, phase, answers, complexity, is_agentic, understanding, builder_profile } = body;
 
         const { data, usage } = await llmParse({
           task: "question",
@@ -152,6 +152,7 @@ export async function POST(req: Request) {
           prompt: promptDiscoverySuggestion(
             description, phase, answers || [],
             complexity, is_agentic, understanding || {},
+            builder_profile || "dev_team",
           ),
           schema: DiscoverySuggestionSchema,
         });
