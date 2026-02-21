@@ -6,7 +6,6 @@
 // ═══════════════════════════════════════════════════════════════
 
 import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { getModelConfig, type TaskType } from "./models";
 import { LLM_MODEL, LLM_MAX_TOKENS, LLM_TEMPERATURE } from "../constants";
@@ -131,7 +130,8 @@ export async function llmStream(options: LLMStreamOptions) {
 
 /**
  * Make an LLM call with Zod-validated structured output.
- * Uses zodOutputFormat() for server-side constrained JSON generation.
+ * Uses prompt-based JSON instruction with Zod validation after response.
+ * Compatible with all Claude model versions.
  * Returns typed, validated data with token usage metadata.
  */
 export async function llmParse<T extends z.ZodType>(
@@ -140,13 +140,20 @@ export async function llmParse<T extends z.ZodType>(
   const anthropic = getClient();
   const config = getModelConfig(options.task);
 
+  // Build JSON instruction suffix
+  const jsonInstruction = "\n\nIMPORTANT: Respond ONLY with valid JSON. No markdown code fences, no explanation, no text before or after the JSON. The JSON must be a single object.";
+
   const messages: Array<{ role: "user" | "assistant"; content: string }> =
     options.messages && options.messages.length > 0
-      ? options.messages
-      : [{ role: "user", content: options.prompt }];
+      ? options.messages.map((m, i) =>
+          i === options.messages!.length - 1 && m.role === "user"
+            ? { ...m, content: m.content + jsonInstruction }
+            : m
+        )
+      : [{ role: "user", content: options.prompt + jsonInstruction }];
 
   return withRetry(async () => {
-    const message = await anthropic.messages.parse({
+    const message = await anthropic.messages.create({
       model: config.model,
       max_tokens: config.maxTokens,
       temperature: config.temperature,
@@ -158,13 +165,24 @@ export async function llmParse<T extends z.ZodType>(
         },
       ],
       messages,
-      output_config: {
-        format: zodOutputFormat(options.schema),
-      },
     });
 
+    // Extract text content
+    const textBlock = message.content.find(b => b.type === "text");
+    const rawText = textBlock && "text" in textBlock ? textBlock.text : "";
+
+    // Clean JSON from response (strip code fences if present)
+    let cleaned = rawText.trim();
+    if (cleaned.startsWith("```")) {
+      cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+
+    // Parse and validate with Zod
+    const parsed = JSON.parse(cleaned);
+    const validated = options.schema.parse(parsed);
+
     return {
-      data: message.parsed_output as z.infer<T>,
+      data: validated as z.infer<T>,
       usage: {
         input_tokens: message.usage.input_tokens,
         output_tokens: message.usage.output_tokens,

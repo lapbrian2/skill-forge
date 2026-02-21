@@ -32,27 +32,27 @@ export const MODEL_CONFIG: Record<TaskType, ModelConfig> = {
     temperature: 0.3,
   },
   question: {
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     maxTokens: 2048,
     temperature: 0.7,
   },
   brief: {
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     maxTokens: 4096,
     temperature: 0.5,
   },
   features: {
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     maxTokens: 8192,
     temperature: 0.6,
   },
   architecture: {
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     maxTokens: 8192,
     temperature: 0.5,
   },
   generate: {
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     maxTokens: 16384,
     temperature: 0.5,
   },

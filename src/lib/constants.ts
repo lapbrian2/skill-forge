@@ -107,6 +107,6 @@ export const SPEC_SECTIONS = [
 // These constants are kept for backward compatibility with deprecated
 // llmCall() and llmCallJSON() functions during migration.
 
-export const LLM_MODEL = "claude-sonnet-4-20250514";
+export const LLM_MODEL = "claude-sonnet-4-6";
 export const LLM_MAX_TOKENS = 4096;
 export const LLM_TEMPERATURE = 0.7;
